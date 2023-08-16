@@ -8,8 +8,8 @@ Instead of server verything in pretty shiny website I decide to stop being a ove
 
 Here are some interesting highlights
 
-- Topic Modeling research funding opportunity for Artificial Intelligence (master project) [report.pdf](UoE - All Reports/Fanzhou_Liang_Business_Project_Report.pdf)
-- UFO map (with actual UFO icons !!) [visualisation.html](UoE - Visualisaion - UFO sighting/UFO visualisation.html)
-- Modeling Covid.
+- Topic Modeling research funding opportunity for Artificial Intelligence (master project) [report.pdf](UoE%20-%20All%20Reports/Fanzhou_Liang_Business_Project_Report.pdf)
+- UFO map (with actual UFO icons !!) [visualisation.html](UoE%20-%20Visualisaion%20-%20UFO%20sighting/UFO%20visualisation.html)
+- Modeling Covid. [report.doc](UoE%20-%20All%20Reports/Is%20lock%20down%20measure%20effective%20in%20reducing%20covid.docx)
 
 
