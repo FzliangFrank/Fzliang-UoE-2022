@@ -1,0 +1,124 @@
+---
+title: "3. Training and Validate Infection Rate"
+output: html_notebook
+editor_options: 
+  chunk_output_type: inline
+---
+
+```{r}
+#remotes::install_github("publichealthengland/coronavirus-dashboard-api-R-sdk")
+library(ukcovid19)
+#install.packages("SEIRfansy")
+library("SEIRfansy")
+query_filters <- c(
+  'areaType=nation',
+  'areaName=England'
+)
+cases_and_deaths = list(
+  date = "date",
+  cumCasesBySpecimenDateRate = "cumCasesBySpecimenDateRate",
+  cumDeaths28DaysByDeathDate = "cumDeaths28DaysByDeathDate"
+)
+df <- get_data(
+  filters = query_filters, 
+  structure = cases_and_deaths
+)
+```
+
+```{r}
+# set functions to convert to days 
+toDays <- function(x){
+ day <-  ceiling((as.numeric(x) - min(as.numeric(x)))/86400)
+ return(day)
+}
+
+df$date <- as.POSIXct(df$date)
+df = na.omit(df)
+```
+
+First Block
+```{r}
+library("drc")
+filter1 <- (df$date >= "2020-02-23")&(df$date <= "2020-06-15")
+block1 <- df[filter1,]
+block1$day = toDays(block1$date)
+
+ts <- subset(block1, date < "2020-05-25" , c(date, day, cumDeaths28DaysByDeathDate))
+vs <- subset(block1, date >= "2020-05-25", c(date, day, cumDeaths28DaysByDeathDate))
+ts
+
+Weibull <- drm(cumDeaths28DaysByDeathDate ~ day, fct = W1.3(), data = ts)
+```
+```{r}
+model <- Weibull 
+with(ts, plot(x = day, y = cumDeaths28DaysByDeathDate, 
+              xlim = c(0,120), main = "Validation",
+            ylim = c(0, 40000), col = "grey51", type = "h",
+            xlab = "Days since day 0",
+            ylab = "Cumulative Death")
+  )
+with(vs, points(x = day, y = cumDeaths28DaysByDeathDate, col = "grey87", type = "h"))
+lines(x = ts$day, y = fitted(model), col = "blue")
+
+legend(1, 38600, legend=c("model", "prediction"),lty=1:1,
+       col=c("blue","skyblue"), cex=0.8,
+       title="Line types", text.font=4)
+
+predicted <- predict(model, vs)
+lines(x = vs$day, y = predicted, col = "skyblue")
+
+```
+```{r}
+sd(fitted(model) - vs$cumDeaths28DaysByDeathDate)
+
+```
+
+```{r}
+filter2 <- (df$date >= "2020-08-13") & (df$date <= "2020-11-30")
+block2 <-  df[filter2,]
+block2$day = toDays(block2$date)
+
+cutpoint <-  "2020-10-31"
+ts.2 <- subset(block2, date < cutpoint, c(day, cumDeaths28DaysByDeathDate))
+vs.2 <- subset(block2, date >= cutpoint, c(day, cumDeaths28DaysByDeathDate))
+#max(block2$day)
+block2
+
+Weibull1 <- drm(cumDeaths28DaysByDeathDate ~ day, fct = W1.4(), data = ts.2)
+Weibull2 <- drm(cumDeaths28DaysByDeathDate ~ day, fct = W2.4(), data = ts.2)
+Loglogi <- drm(cumDeaths28DaysByDeathDate ~ day, fct = LL.4(), data = ts.2)
+lm <- lm(cumDeaths28DaysByDeathDate ~ exp(day), data = ts.2)
+```
+```{r}
+model.2 = Weibull2
+with(ts.2, plot(x = day, y = cumDeaths28DaysByDeathDate, 
+              xlim = c(0,112), main = "Validation",
+            ylim = c(36000, 60000), col = "grey51", type = "h",
+            xlab = "Days since day 0",
+            ylab = "Cumulative Death")
+  )
+with(vs.2, points(x = day, y = cumDeaths28DaysByDeathDate, col = "grey87", type = "h"))
+lines(x = ts.2$day, y = fitted(model.2), col = "blue")
+
+predicted <- predict(model.2, vs.2)
+lines(x = vs.2$day, y = predicted, col = "skyblue")
+
+legend(1, 60000, legend=c("model", "prediction"),lty=1:1,
+       col=c("blue","skyblue"), cex=0.8,
+       title="Line types", text.font=4)
+```
+If you change interval from July to August the model became more accurate. Theory is may be because there is lag between infection and death. And that official day is 28 days.haha 
+```{r}
+summary(model)
+summary(model.2)
+
+ 41340.053/(66.65*10^6)
+3.837e+05/(0.01*66.65*10^6)
+
+3.837e+05/(0.01*66.65*10^6)
+3.8367e+05 - 3.6876e+04
+(3.8367e+05 - 3.6876e+04)/ 41340.053
+
+2133 - 393
+
+```

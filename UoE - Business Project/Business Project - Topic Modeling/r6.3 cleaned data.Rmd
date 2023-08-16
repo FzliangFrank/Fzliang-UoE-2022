@@ -1,0 +1,566 @@
+---
+title: "Cleaned Data"
+author: "Frank Liang"
+date: "03/10/2021"
+output: html_document
+---
+# load up 
+```{r}
+setwd("~/Dropbox/Projects/Business Project - Topic Modeling")
+library(readr)
+library(tidyverse)
+library(ggplot2)
+library(tokenizers)
+library(plotly)
+library(tidytext)
+library(htmlwidgets)
+
+theme_set(theme(
+          panel.grid.major = element_blank(),
+          panel.grid.minor = element_blank(),
+          panel.border = element_blank(),
+          panel.background = element_rect(fill = "#f7f7f7"),
+          plot.background = element_rect(fill = "white")
+        ))
+
+complete <- read_csv("raw/complete.csv")
+AIbyTopic <- read_csv("raw/AIbyTopic.csv")
+cooked_csv <- read_csv("raw/cooked.csv")
+abstractText <- read_csv("raw/abstractText.csv")
+
+# base function lookup a value
+lookup <- function(df, col,term) {
+  df <- ungroup(df)
+  rgx = paste0("(?i)(",term,")")
+  filter(df, str_detect(pull(df, col), rgx))
+}
+
+# right and left function 
+Right <- function(x, n){
+  substr(x, nchar(x)-n+1, nchar(x))
+}
+Left <- function(x, n){
+  substr(x, 1, n)
+}
+
+# find data from id | requires `cooked_csv`
+ref_data <- function(vector){
+    value = paste(rep("ProjectReference ==", each = length(vector)), shQuote(vector), collapse = " | ")
+    
+  cooked_csv %>%
+    filter(eval(parse(text = value)))
+  }
+# filter arguement 
+arg_f <- function(vector, col = "ProjectReference"){
+    paste(rep(paste(col, "=="), each = length(vector)), shQuote(vector), collapse = " | ")
+}
+
+# visualize by a vector of given id
+viz_id <- function(projectReference, text_label = FALSE, nudge = 100){
+value = paste(rep("ProjectReference ==", each = length(projectReference)), shQuote(projectReference), collapse = " | ")
+cooked_csv %>%
+    filter(eval(parse(text = value))) -> df
+if(text_label == TRUE) {
+  #visualization part
+  df %>%
+    ggplot(aes(y = AwardPounds, label = LeadROName, label1= Title)) + 
+    geom_linerange(aes(xmin = StartDate, xmax = EndDate, y = AwardPounds), color = "#363636") +
+    geom_point(aes(x = StartDate), color = "#363636") + 
+    geom_point(aes(x = EndDate), color = "coral") + 
+    labs(title = paste("Explore topics")) + 
+    geom_text(aes(x = StartDate + duration/2, y = AwardPounds, label = paste(LeadROName , Title)), nudge_y = nudge, size = 2.5) -> g
+  
+  ggplotly(g) %>%
+    style(traces = 2, text = paste(df$StartDate,"\n",df$duration, "days")) %>%
+    style(traces = 1, text = paste(round(df$price),"\n", df$PIFirstName, df$PISurname,"\n",df$duration, "days")) %>%
+    style(traces = 3, customdata = df$GTRProjectUrl, text = paste(df$EndDate,"\n", df$LeadROName, "\n",df$Title)) %>%
+    onRender("
+      function(el) { 
+        el.on('plotly_click', function(d) { 
+          var url = d.points[0].customdata;
+          window.open(url);
+        });
+      }
+    ") # set up click event that open URL 
+  } else { df %>%
+      ggplot(aes(y = AwardPounds, label = LeadROName, label1= Title)) + 
+      geom_linerange(aes(xmin = StartDate, xmax = EndDate, y = AwardPounds), color = "#363636") +
+      geom_point(aes(x = StartDate), color = "#363636") + 
+      geom_point(aes(x = EndDate), color = "coral") + 
+      labs(title = paste("Explore topics")) -> g
+    
+    ggplotly(g) %>%
+      style(traces = 2, text = paste(df$StartDate,"\n",df$duration, "days")) %>%
+      style(traces = 1, text = paste(round(df$price),"\n", df$PIFirstName, df$PISurname,"\n",df$duration, "days")) %>%
+      style(traces = 3, customdata = df$GTRProjectUrl, text = paste(df$EndDate,"\n", df$LeadROName, "\n",df$Title)) %>%
+      onRender("
+        function(el) { 
+          el.on('plotly_click', function(d) { 
+            var url = d.points[0].customdata;
+            window.open(url);
+          });
+        }
+      ") # set up click event that open URL
+  }
+}
+# visualize a project from `cooked_csv`
+view_prj <- function(row, term){
+lookup(cooked_csv, row, term) -> df
+df %>%
+  ggplot(aes(y = AwardPounds, label = LeadROName, label1= Title)) + 
+  geom_linerange(aes(xmin = StartDate, xmax = EndDate, y = AwardPounds), color = "#363636") +
+  geom_point(aes(x = StartDate), color = "#363636") + 
+  geom_point(aes(x = EndDate), color = "coral") + 
+  labs(title = paste("Explore topics")) + 
+  geom_text(aes(x = StartDate + duration/2, y = AwardPounds, label = Title), nudge_y = 50, size = 2.5) -> g
+
+ggplotly(g) %>%
+  style(traces = 2, text = paste(df$StartDate,"\n",df$duration, "days")) %>%
+  style(traces = 1, text = paste(round(df$price),"\n", df$PIFirstName, df$PISurname,"\n",df$duration, "days")) %>%
+  style(traces = 3, customdata = df$GTRProjectUrl, text = paste(df$EndDate,"\n", df$LeadROName, "\n",df$Title)) %>%
+  onRender("
+    function(el) { 
+      el.on('plotly_click', function(d) { 
+        var url = d.points[0].customdata;
+        window.open(url);
+      });
+    }
+  ") # set up click event that open URL
+}
+
+```
+Key function defined: 
+- `arg_f(vector, col)` transfer a vector into filter arguments. Can specify `col` to which part to fit
+- `ref_data` retrieve a dataframe from `cooked_csv` based on ProjectReference (the shorter id)
+- `lookup(dataframe, col, term)` find related row column by regrex matching terms
+- `viz_id(vector, text_label = <Boo>)` from visualized data based on `cooked_csv`given a *vector* of  ProjectReference (shorter id). Boolearn argmenet
+- `view_prj` quickly view project just by given a few term
+
+
+```{r}
+singled <- read_csv("raw/cleaned_unique.csv")
+transfered <- read_csv("raw/transfered_projects.csv")
+paralleled <- read_csv("raw/paralleled_projects.csv")
+
+transfered_id <- pull(transfered)
+paralleled_id <- paralleled %>% pull(ProjectReference)
+```
+
+```{r}
+abstractText %>% 
+  left_join(cooked_csv, by = c("id" = "ProjectId")) %>%
+  filter(eval(parse(text = arg_f(paralleled_id)))) %>%
+  group_by(title) %>%
+  summarise(n = length(title))
+```
+
+# Why do you see some parallel projects has only one unique entry?
+```{r}
+cooked_csv %>%
+  filter(eval(parse(text = arg_f(paralleled_id)))) %>%
+  group_by(Title) %>%
+  summarise(n = length(Title)) %>%
+  filter(n == 1)
+```
+
+```{r}
+cooked_csv %>%
+  group_by(Title) %>%
+  mutate(n = length(Title)) %>%
+  filter(n > 1) %>%
+  filter(!eval(parse(text = arg_f(transfered_id)))) %>%
+  mutate(n = length(Title)) %>%
+  filter(n == 1) %>%
+  select(Title, n)
+```
+
+Above two block of code run the same result. 
+
+The reason you find n = 1 from paralleled project is because some of them may share the same name with parallel projects: 
+Title                                                                  n
+  <chr>                                                              <int>
+1 Adaptive Automated Scientific Laboratory                               1
+2 Advancing Machine Learning Methodology for New Classes of Predict…     1
+3 Engineering Transformation for the Integration of Sensor Networks…     1
+4 Evolutionary Algorithms for Dynamic Optimization Problems: Design…     1
+5 Explainable AI for UK agricultural land use decision-making            1
+6 Robustness-as-evolvability: building a dynamic control plane with…     1
+7 TRANSIT: Towards a Robust Airport Decision Support System for Int…     1
+8 UCT for Games and Beyond                                               1
+
+```{r}
+view_prj("Title", "Advancing Machine Learning Methodology for New Classes")
+```
+In above case 5 projects share the same title, 2 pair of them are linked together; this leave 1 that's different
+
+An example of a pair of parallel project
+```{r}
+cooked_csv %>%
+  group_by(Title) %>%
+  mutate(n = length(Title)) %>%
+  filter(n > 1) %>%
+  filter(!eval(parse(text = arg_f(transfered_id)))) %>%
+  mutate(n = length(Title)) %>%
+  filter(n > 1) %>%
+  select(ProjectReference, Title, n) %>%
+  arrange(n, Title) %>%
+  head(n = 2) %>%
+  pull(ProjectReference) %>%
+  viz_id(text_label = TRUE, nudge = 7000)
+```
+
+Play with unique values
+```{r}
+cooked_csv %>%
+  filter(!eval(parse(text = arg_f(paralleled_id)))) %>%
+  filter(!eval(parse(text = arg_f(transfered_id)))) -> uniques
+
+library(ggExtra)
+uniques %>%
+  ggplot(aes(x = duration, y = price)) + geom_point() -> g
+ggMarginal(g)
+ggplotly(g) %>%
+  style(customdata = uniques$GTRProjectUrl, text = uniques$Title) %>%
+  onRender("
+    function(el) { 
+      el.on('plotly_click', function(d) { 
+        var url = d.points[0].customdata;
+        window.open(url);
+      });
+    }
+  ")
+
+```
+
+```{r}
+non_transfered <- cooked_csv %>%
+  filter(!eval(parse(text = arg_f(paralleled_id))))
+
+view_prj("LeadROName", "Alan")
+```
+
+
+## Linear Verify Price and Duration are Correlated
+```{r}
+df <- non_transfered %>%
+  filter(price < 10000)
+with(df, lm(AwardPounds ~ duration)) %>% summary()
+```
+
+Call:
+lm(formula = AwardPounds ~ duration)
+
+Residuals:
+     Min       1Q   Median       3Q      Max 
+-2649644  -596133  -185610   176670 13579367 
+
+Coefficients:
+              Estimate Std. Error t value Pr(>|t|)    
+(Intercept) -619992.13  113956.01  -5.441 7.45e-08 ***
+duration       1379.56      99.46  13.870  < 2e-16 ***
+---
+Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+Residual standard error: 1400000 on 670 degrees of freedom
+Multiple R-squared:  0.2231, 	Adjusted R-squared:  0.2219 
+F-statistic: 192.4 on 1 and 670 DF,  p-value: < 2.2e-16
+
+> mean(df$duration)
+[1] 1052.899
+
+```{r}
+df <- non_transfered %>%
+  filter(price < 10000) %>%
+  filter(price < quantile(price, 0.7))
+with(df, lm(AwardPounds ~ duration)) %>% summary()
+```
+
+Call:
+lm(formula = AwardPounds ~ duration)
+
+Residuals:
+    Min      1Q  Median      3Q     Max 
+-530617  -61445   -1037   59133  378843 
+
+Coefficients:
+             Estimate Std. Error t value Pr(>|t|)    
+(Intercept) -61521.08   12070.37  -5.097 5.24e-07 ***
+duration       341.90      11.98  28.540  < 2e-16 ***
+---
+Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+Residual standard error: 115300 on 418 degrees of freedom
+Multiple R-squared:  0.6609,	Adjusted R-squared:   0.66 
+F-statistic: 814.5 on 1 and 418 DF,  p-value: < 2.2e-16
+
+```{r}
+df <- non_transfered %>%
+  filter(price < 10000) 
+with(df, lm(log(AwardPounds) ~ duration)) %>% summary()
+```
+
+> with(df, lm(log(AwardPounds) ~ duration)) %>% summary()
+
+Call:
+lm(formula = log(AwardPounds) ~ duration)
+
+Residuals:
+    Min      1Q  Median      3Q     Max 
+-3.2838 -0.2786  0.1543  0.4430  1.1486 
+
+Coefficients:
+             Estimate Std. Error t value Pr(>|t|)    
+(Intercept) 1.037e+01  7.213e-02  143.83   <2e-16 ***
+duration    1.796e-03  7.159e-05   25.08   <2e-16 ***
+---
+Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+Residual standard error: 0.6893 on 418 degrees of freedom
+Multiple R-squared:  0.6008,	Adjusted R-squared:  0.5999 
+F-statistic: 629.2 on 1 and 418 DF,  p-value: < 2.2e-16
+
+```{r}
+df <- non_transfered %>%
+  filter(price < 10000) 
+with(df, lm(sqrt(AwardPounds) ~ duration)) %>% summary()
+```
+> with(df, lm(sqrt(AwardPounds) ~ duration)) %>% summary()
+
+Call:
+lm(formula = sqrt(AwardPounds) ~ duration)
+
+Residuals:
+    Min      1Q  Median      3Q     Max 
+-601.71  -66.30    1.76   81.01  206.62 
+
+Coefficients:
+             Estimate Std. Error t value Pr(>|t|)    
+(Intercept) 136.64359   11.70993   11.67   <2e-16 ***
+duration      0.35259    0.01162   30.34   <2e-16 ***
+---
+Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+Residual standard error: 111.9 on 418 degrees of freedom
+Multiple R-squared:  0.6877,	Adjusted R-squared:  0.6869 
+F-statistic: 920.4 on 1 and 418 DF,  p-value: < 2.2e-16
+
+```{r}
+library(MASS)
+bc <- with(df, boxcox(AwardPounds ~ duration))
+lambda <- bc$x[which.max(bc$y)]
+with(df, lm(((AwardPounds^lambda-1)/lambda) ~ duration)) %>% summary()
+```
+
+> with(df, lm(((AwardPounds^lambda-1)/lambda) ~ duration)) %>% summary()
+
+Call:
+lm(formula = ((AwardPounds^lambda - 1)/lambda) ~ duration)
+
+Residuals:
+    Min      1Q  Median      3Q     Max 
+-485.82  -54.01    3.14   63.08  158.43 
+
+Coefficients:
+             Estimate Std. Error t value Pr(>|t|)    
+(Intercept) 1.627e+02  9.405e+00   17.30   <2e-16 ***
+duration    2.808e-01  9.334e-03   30.08   <2e-16 ***
+---
+Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+Residual standard error: 89.87 on 418 degrees of freedom
+Multiple R-squared:  0.684,	Adjusted R-squared:  0.6833 
+F-statistic:   905 on 1 and 418 DF,  p-value: < 2.2e-16
+
+# Remove Alan Turing from database
+```{r}
+non_transfered %>%
+  lookup("LeadROName", "alan turing") %>%
+  pull(ProjectReference) -> alan_turing
+non_transfered %>%
+  filter(!eval(parse(text = arg_f(alan_turing)))) -> no_alan
+```
+
+```{r}
+with(df, lm(sqrt(AwardPounds) ~ duration)) -> sqrt
+with(df, lm(((AwardPounds^lambda-1)/lambda) ~ duration)) -> lamb
+with(df, lm(log(AwardPounds) ~ duration)) -> logm
+with(df, lm(AwardPounds ~ duration)) -> base
+
+plot(density(resid(sqrt))) # assumption four
+plot(y = resid(sqrt), x = fitted.values(sqrt)) #heter-cadasity
+```
+
+
+## Rankings
+```{r}
+no_alan %>%
+  group_by(LeadROName) %>%
+  summarise(mean = mean(price)) %>%
+  arrange(-mean) 
+```
+Southampton is top if you remove all the transferred project and remove alan turing
+
+** find out that some of the transfered project are accidently removed from the "unique" process
+```{r}
+view_prj("LeadROName", "Sheffield Hallam University")
+view_prj("LeadROName", "university of Leicester")
+lookup(no_alan, "Title", "Number Understanding Modelling in Behavioural Embodied Robotic Systems") %>% pull(price)
+lookup(no_alan, "LeadROName", "Sheffield hallam")
+```
+
+
+```{r}
+with(no_alan, lm(price ~ LeadROName)) %>% summary() %>% tidy() %>% filter(p.value < 0.05)
+```
+
+
+```{r}
+# homogeneity of variance
+uniques$LeadROName <- as.factor(uniques$LeadROName)
+fligner.test(no_alan$price ~ no_alan$LeadROName)
+
+bartlett.test(no_alan$price, no_alan$LeadROName)
+```
+> fligner.test(uniques$price ~ uniques$LeadROName)
+	Fligner-Killeen test of homogeneity of variances
+data:  uniques$price by uniques$LeadROName
+Fligner-Killeen:med chi-squared = 167.48, df = 81, p-value =
+5.603e-08
+---
+
+Assumption is not satisfied at all. This does not meet the heterocatisty assumption. This suggest intergroup variance is not equal. 
+```{r}
+# Levene's Test on equal variance among treatment 
+library(car)
+leveneTest(data = uniques, price ~ factor(LeadROName))
+```
+> leveneTest(data = uniques, price ~ factor(LeadROName))
+Levene's Test for Homogeneity of Variance (center = median)
+       Df F value    Pr(>F)    
+group  81  2.1816 1.714e-07 ***
+      521                      
+---
+Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+```{r}
+box.cox()
+```
+
+Levene in spite if residual is normally distributed. Intern-group residual is not equal. 
+
+
+```{r}
+# an example of applyint Tukey model comparation (not gonna work just example!!)
+with(no_alan, aov(price ~ LeadROName)) %>% TukeyHSD() %>%
+  tidy() %>% 
+  filter(adj.p.value < 0.5) %>%
+  dplyr::select(contrast)
+
+
+no_alan %>%
+  group_by(LeadROName) %>%
+  mutate(n = length(LeadROName)) %>%
+  dplyr::filter(!n == 1) %>%
+  aov(formula = price ~ LeadROName) %>%
+  TukeyHSD() %>%
+  tidy() %>%
+  filter(adj.p.value < 0.5) %>%
+  dplyr::select(contrast)
+
+# Use Welch ANOVA
+library(onewaytests)
+no_alan %>%
+  group_by(LeadROName) %>%
+  mutate(n = length(LeadROName)) %>%
+  dplyr::filter(!n == 1) %>%
+  welch.test(formula = price ~ LeadROName)
+```
+
+
+```{r}
+# box cox transformation to make this all normal
+library(MASS)
+bc <- with(no_alan, boxcox(price ~ LeadROName))
+lambda <- bc$x[which.max(bc$y)]
+
+# test homogeneity
+leveneTest(data = no_alan, ((price^lambda-1)/lambda) ~ as.factor(LeadROName) )
+
+leveneTest(data = no_alan, sqrt(price) ~ as.factor(LeadROName) )
+```
+
+```{r}
+with(no_alan, lm(((price^lambda-1)/lambda) ~ LeadROName)) %>%
+  summary() %>% tidy() %>%
+  filter(p.value < 0.01) %>%
+  arrange(p.value)
+
+plot(density((uniques$price^lambda-1)/lambda))
+lookup(no_alan, "LeadROName", "Newcastle") %>%
+  ggplot(aes(x = price)) + geom_density()
+
+```
+
+```{r}
+with(no_alan, lm(sqrt(price) ~ LeadROName)) %>% summary()
+with(no_alan, lm(duration ~ LeadROName)) %>% summary()
+```
+
+
+
+```{r}
+# number of project in each group
+no_alan %>%
+  group_by(LeadROName) %>%
+  summarise(n = length(LeadROName)) -> x
+
+# sqrt transfromation by price
+with(no_alan, lm(sqrt(price) ~ LeadROName)) %>%
+  summary() %>% tidy() %>%
+  filter(p.value < 0.05) %>%
+  arrange(-estimate) %>%
+  mutate(term = str_replace(term, "LeadROName", "")) %>%
+  left_join(x, by = c("term" = "LeadROName")) %>%
+  View()
+```
+
+```{r}
+# rank by mean price
+no_alan %>% 
+  group_by(LeadROName) %>%
+  summarise(mean_p = mean(price)) %>%
+  arrange(-mean_p)
+
+# rank by mean award
+no_alan %>% 
+  group_by(LeadROName) %>%
+  summarise(mean_a = mean(AwardPounds)) %>%
+  arrange(-mean_a)
+
+# rank by number of output 
+arrange(x, -n)
+```
+
+```{r}
+leveneTest(data = no_alan, duration ~ as.factor(LeadROName))
+with(no_alan, lm(duration ~ LeadROName)) %>%
+  summary() %>% tidy() %>% filter(p.value < 0.05) %>%
+  mutate(term = str_replace(term, "LeadROName", "")) %>%
+  left_join(x, by = c("term" = "LeadROName")) %>%
+  dplyr::select(term, estimate, p.value, n) 
+```
+
+
+```{r}
+no_alan %>%
+  ggplot(aes(x = sqrt(price)) ) + geom_density() + 
+  geom_vline(xintercept = 12.49189 + 12.73202, color = "blue", alpha = 0.3) + 
+  geom_vline(xintercept = mean(sqrt(no_alan$price)), alpha = 0.5) + 
+  geom_vline(xintercept = 12.49189 + 22.23578, color = "blue", alpha = 0.7)
+
+no_alan %>%
+  ggplot(aes(x = duration) ) + geom_density() + 
+  geom_vline(xintercept = 747.0000 + 550.8462, color = "blue", alpha = 0.3) + 
+   geom_vline(xintercept = mean(no_alan$duration), alpha = 0.5) + 
+  geom_vline(xintercept = 747.0000 + 1106.6000, color = "blue", alpha = 0.7)
+```

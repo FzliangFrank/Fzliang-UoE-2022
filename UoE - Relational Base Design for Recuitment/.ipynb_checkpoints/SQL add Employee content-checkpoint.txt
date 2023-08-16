@@ -1,0 +1,46 @@
+INSERT INTO EMPLOYEES (Employee_ID Name, Role, Attrition, Gender) values (?, ?, ?)
+
+
+(20200001,Hector Richard,1,9,M,23000)
+(20200002,Deacon Coates,1,1,M,24000)
+(20200003,Jared Puckett,1,2,M,30000)
+(20200004,Judah Haworth,1,4,F,50000)
+(20200005,Dalton Herbert,2,6,M,23000)
+(20200006,Arslan Glover,2,2,M,24000)
+(20200007,Blake Alvarez,2,2,M,30000)
+(20200008,Esmay Dejesus,2,2,F,50000)
+(20200009,Donte Barnes,3,2,M,23000)
+(20200010,Akbar Hunter,3,2,M,24000)
+(20200011,Aahil Peters,3,7,M,30000)
+(20200012,Tamia Wall,3,2,F,50000)
+(20200013,Tamera Coleman,4,2,F,23000)
+(20200014,Glenn Atkinson,4,2,F,24000)
+(20200015,Olly Bryan,4,2,M,30000)
+(20200016,Harlen Richardson,4,2,F,50000)
+(20200017,Romeo Drake,5,5,M,23000)
+(20200018,Lavinia Howell,5,8,F,24000)
+(20200019,Star Michael,5,9,F,30000)
+(20200020,Lyla O'Connor,5,2,F,50000)
+
+
+# SQL version? 
+20200001,Hector Richard,1,9,M,23000
+20200002,Deacon Coates,1,1,M,24000
+20200003,Jared Puckett,1,2,M,30000
+20200004,Judah Haworth,1,4,F,50000
+20200005,Dalton Herbert,2,6,M,23000
+20200006,Arslan Glover,2,2,M,24000
+20200007,Blake Alvarez,2,2,M,30000
+20200008,Esmay Dejesus,2,2,F,50000
+20200009,Donte Barnes,3,2,M,23000
+20200010,Akbar Hunter,3,2,M,24000
+20200011,Aahil Peters,3,7,M,30000
+20200012,Tamia Wall,3,2,F,50000
+20200013,Tamera Coleman,4,2,F,23000
+20200014,Glenn Atkinson,4,2,F,24000
+20200015,Olly Bryan,4,2,M,30000
+20200016,Harlen Richardson,4,2,F,50000
+20200017,Romeo Drake,5,5,M,23000
+20200018,Lavinia Howell,5,8,F,24000
+20200019,Star Michael,5,9,F,30000
+20200020,Lyla O'Connor,5,2,F,50000

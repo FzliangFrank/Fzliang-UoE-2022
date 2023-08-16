@@ -1,0 +1,124 @@
+---
+title: "5. Linear Regression"
+author: "Frank Liang"
+date: "07/05/2021"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(readr)
+library(readxl)
+factor_scores <- read_csv("factor_scores.csv")
+SmartWatch_Data_File <- read_excel("SmartWatch Data File.xlsx")
+```
+
+```{r}
+df <- cbind(SmartWatch_Data_File, factor_scores)
+
+df <- df%>%
+  mutate(AmznP = factor(AmznP)) %>%
+  mutate(Female = factor(Female)) %>%
+  mutate(Degree = factor(Degree)) %>%
+  mutate(Income = factor(Income))
+
+lm(F1 ~ Age, data = df) %>%
+  summary()
+
+lm(F2 ~ Age, data = df) %>%
+  summary()
+```
+
+```{r}
+library(ggplot2)
+require(gridExtra)
+
+g1.1 <- ggplot(df, aes(x = Age, y = F1, colour = AmznP)) + 
+  geom_point() + 
+  geom_jitter() + 
+  stat_summary(fun.data=mean_cl_normal) + 
+  geom_smooth(method='lm', formula= y~x) +
+  scale_colour_brewer(palette= "Accent") + 
+  ylim(0,5) + 
+  theme_minimal()
+
+g2.1 <- ggplot(df, aes(x = Age, y = F2, colour = AmznP)) + 
+  geom_point() + 
+  geom_jitter() + 
+  stat_summary(fun.data=mean_cl_normal) + 
+  geom_smooth(method='lm', formula= y~x) +
+  scale_colour_brewer(palette= "Accent") + 
+  ylim(0,5) + 
+  theme_minimal()
+
+```
+
+```{r}
+g1.2 <- ggplot(df, aes(x = Age, y = F1, colour = Female)) + 
+  geom_point() + 
+  geom_jitter() + 
+  stat_summary(fun.data=mean_cl_normal) + 
+  geom_smooth(method='lm', formula= y~x) +
+  scale_colour_brewer(palette= "Accent") + 
+  ylim(0,5) + 
+  theme_minimal()
+
+g2.2 <- ggplot(df, aes(x = Age, y = F2, colour = Female)) + 
+  geom_point() + 
+  geom_jitter() + 
+  stat_summary(fun.data=mean_cl_normal) + 
+  geom_smooth(method='lm', formula= y~x) +
+  scale_colour_brewer(palette= "Accent") + 
+  ylim(0,5) + 
+  theme_minimal()
+
+```
+
+```{r}
+g1.3<- ggplot(df, aes(x = Age, y = F1, colour = Degree)) + 
+  geom_point() + 
+  geom_jitter() + 
+  stat_summary(fun.data=mean_cl_normal) + 
+  geom_smooth(method='lm', formula= y~x) +
+  scale_colour_brewer(palette= "Accent") + 
+  ylim(0,5) + 
+  theme_minimal()
+
+g2.3 <- ggplot(df, aes(x = Age, y = F2, colour = Degree)) + 
+  geom_point() + 
+  geom_jitter() + 
+  stat_summary(fun.data=mean_cl_normal) + 
+  geom_smooth(method='lm', formula= y~x) +
+  scale_colour_brewer(palette= "Accent") + 
+  ylim(0,5) + 
+  theme_minimal()
+```
+
+```{r}
+grid.arrange(grobs = list(g1.1, g1.2, g1.3,
+             g2.1, g2.2, g2.3), nrow = 2)
+```
+
+
+```{r}
+library(dplyr)
+df <- cbind(SmartWatch_Data_File, factor_scores)
+glm(data = df, AmznP ~ Age, family = (binomial(link = "logit"))) %>%
+  summary()
+```
+
+```{r}
+lm(data = df, F1 ~ F2) %>%
+  summary()
+
+```
+
+```{r}
+
+```
+

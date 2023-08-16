@@ -1,0 +1,36 @@
+---
+title: "Alluvial Plot/Sankey Diagram"
+author: "Frank Liang"
+date: "22/09/2021"
+output: html_document
+---
+
+Make it interactive use [plotly](https://plotly.com/r/sankey-diagram/)
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+library(ggplot)
+library(ggplotly)
+library(ggalluvial)
+
+AIbyTopic <- read_csv("raw/AIbyTopic.csv")
+complete <- read_csv("raw/complete.csv")
+```
+
+```{r}
+AIbyTopic %>%
+  dplyr::select("FundingOrgName",'ProjectCategory',"LeadROName",'AwardPounds') %>%
+  mutate(FundingOrgName = as.factor(FundingOrgName)) %>%
+  mutate(LeadROName = as.factor(LeadROName)) %>%
+  mutate(ProjectCategory = as.factor(ProjectCategory)) %>%
+  ggplot(aes(weight = AwardPounds, axis1 = FundingOrgName, axis2 = LeadROName, fill = FundingOrgName)) + 
+  geom_alluvium(aes(fill = FundingOrgName)) + 
+  geom_stratum(width = 1/12, fill = "black", color = "white") + 
+  #geom_label(stat = "stratum", aes(label = after_stat(stratum))) +
+  scale_x_discrete(limits = c("Funding Organisation", "Leading Research"), expand = c(.05, .05)) +
+  scale_fill_brewer(type = "qual", palette = "BuPu")
+```

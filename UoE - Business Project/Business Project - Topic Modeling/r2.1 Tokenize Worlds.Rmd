@@ -1,0 +1,134 @@
+---
+title: "2.1 Topic Modeling"
+author: "Frank Liang"
+date: "25/08/2021"
+output: html_document
+---
+
+```{r}
+library(readr)
+library(tidyverse)
+library(ggplot2)
+library(tokenizers)
+```
+
+
+```{r}
+df <- read_csv("raw/complete.csv")
+```
+
+Tokenize three sampled abstract text
+```{r}
+df %>%
+  dplyr::select(abstractText, X1) %>%
+  pull(abstractText) %>%
+  tokenize_word_stems() -> tok
+```
+
+Loading package called `quanteda`. 
+```{r}
+library(quanteda)
+#install.packages("quanteda")
+#install.packages('Rcpp')
+```
+
+3. remove punctiuation and white space
+```{r}
+tok <- tokens(tok)
+toks_nostop <- tokens_select(tok, pattern = stopwords("en"), selection = "remove")
+print(toks_nostop)
+
+```
+
+```{r}
+library(stm)
+library(topicmodels)
+toks_nostop %>%
+  dfm() %>%
+  LDA(k = 10, control = list(seed = 10)) -> mod
+
+mod
+#kwic(toks_nostop, pattern = "", valuetype = "regex")
+tidy(mod, matrix = "beta") %>%
+  group_by(topic) %>%
+  top_n(10, beta) %>%
+  ungroup() %>%
+  arrange(topic, -beta) -> topic
+
+topic %>%
+  mutate(term = reorder(term, beta)) %>%
+  ggplot(aes(fill = factor(topic), y = term, x = beta)) +
+  geom_col() +
+  facet_wrap(~ topic, scales = "free")
+```
+Extracted totally 10 topics, you want to remove words "research" and "project"? because each one of them is a research or topic so it is not particularly helpful. 
+
+```{r}
+toks_nostop %>%
+  tokens_select(c("research", "project", "develop", "data","use"), selection = "remove") %>%
+  dfm() %>%
+  LDA(k = 10, control = list(seed = 10)) -> mod
+tidy(mod, matrix = "beta") %>%
+  group_by(topic) %>%
+  top_n(10, beta) %>%
+  ungroup() %>%
+  arrange(topic, -beta) -> topic
+
+topic %>%
+  mutate(term = reorder(term, beta)) %>%
+  ggplot(aes(fill = factor(topic), y = term, x = beta)) +
+  geom_col() +
+  facet_wrap(~ topic, scales = "free")
+```
+
+Try use stm for lda
+```{r}
+toks_nostop %>%
+  tokens_select(c("research", "project", "develop", "data","use"), selection = "remove") %>%
+  dfm() %>%
+  stm(K = 10, 
+      verbose = FALSE, 
+        init.type = "LDA") -> lda
+
+findThoughts(lda, text = df$abstractText, n = 6, topics = 3)$docs %>%
+  print()
+
+lda %>%
+  tidy(matrix = "beta") %>%
+  group_by(topic, beta) %>%
+  top_n(10, beta) %>%
+  ungroup() %>%
+  arrange(topic, -beta) %>%
+  mutate(term = reorder(term, beta)) -> topic
+  
+topic %>%
+  ggplot(aes(fill = factor(topic), y = term, x = beta)) +
+  geom_col() +
+  facet_wrap(~ topic, scales = "free")
+```
+
+
+use `textProcessor` to do everything
+```{r}
+df %>%
+  dplyr::select(abstractText, X1) %>%
+  pull(abstractText) %>%
+  textProcessor(metadata = df) -> cooked
+
+out <- with(cooked, prepDocuments(documents,vocab, meta))
+attach(out)
+```
+
+```{r}
+stm(documents = documents, vocab = vocab, K = 10, data = meta, init.type = "Spectral", verbose = FALSE) -> first_stm
+```
+
+```{r}
+plot(first_stm)
+findThoughts(first_stm, text = df$abstractText, n = 2, topics = 3)
+```
+
+```{r}
+searchK(documents, vocab, K = c(10,30), data = meta, verbose = FALSE)
+```
+

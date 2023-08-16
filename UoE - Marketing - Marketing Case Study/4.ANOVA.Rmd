@@ -1,0 +1,243 @@
+---
+title: "R Notebook"
+output: html_notebook
+editor_options: 
+  chunk_output_type: inline
+---
+
+```{r message=FALSE}
+library(tidyverse)
+library(readxl)
+factor_scores <- read_csv("factor_scores.csv")
+SmartWatch_Data_File <- read_excel("SmartWatch Data File.xlsx")
+```
+
+```{r}
+library(psych)
+df <- SmartWatch_Data_File %>%
+  cbind(factor_scores[,c(4,5)])
+df <- df%>%
+  mutate(AmznP = factor(AmznP)) %>%
+  mutate(Female = factor(Female)) %>%
+  mutate(Degree = factor(Degree)) %>%
+  mutate(Income = factor(Income))
+```
+
+```{r}
+replications(data = df, F1 ~ AmznP*Female*Degree*Income)
+```
+Note this is an unbalanced design `aov` method is not suit for this...
+
+```{r}
+library(nlme)
+library(car)
+lm(data = df, F1 ~ AmznP*Female*Degree) %>%
+  Anova(type = 3) %>%
+  print()
+```
+```{r}
+lm(data = df, F2 ~ AmznP*Female*Degree) %>%
+  Anova(type = "III")
+```
+```{r}
+lm(data = df, F1 ~ Income) %>%
+  Anova(Type = 3)
+```
+
+
+```{r}
+aov(data = df, F1 ~ AmznP + Female + Degree + Income) %>%
+  summary.lm()
+
+aov(data = df, F1 ~ Female + Degree + Income + AmznP) %>%
+  summary.lm()
+```
+
+```{r}
+aov1 <- aov(data = df, F1 ~ AmznP + Female + Degree + Income) 
+aov2 <- aov(data = df, F2 ~ AmznP + Female + Degree + Income) 
+summary(aov1)
+summary(aov2)
+```
+"AmznP"  "Female" "Degree" "Income"
+```{r}
+aov(data = df, F1 ~ Income) %>%
+  summary.lm()
+
+```
+
+```{r}
+plot(aov1)
+```
+
+```{r}
+library(ggplot2)
+require(gridExtra)
+```
+Box plot
+```{r}
+g1.1 <- df %>%
+  ggplot(aes(x = AmznP, y = F1)) +
+  geom_boxplot() + 
+  ylab("F1 - Personal Trainner") + 
+  theme_light()
+g1.2 <- df %>%
+  ggplot(aes(x = Female, y = F1)) +
+  geom_boxplot() + 
+  ylab(NULL) + 
+  theme_light()
+g1.3 <- df %>%
+  ggplot(aes(x = Degree, y = F1)) + 
+  geom_boxplot() + 
+  ylab(NULL) + 
+  theme_light()
+g1.4 <- df %>%
+  ggplot(aes(x = Income, y = F1)) + 
+  geom_boxplot() + 
+  ylab(NULL) + 
+  theme_light()
+
+g2.1 <- df %>%
+  ggplot(aes(x = AmznP, y = F2)) +
+  geom_boxplot() + 
+  ylab("F2 - Personal Secretory") + 
+  theme_light()
+g2.2 <- df %>%
+  ggplot(aes(x = Female, y = F2)) +
+  geom_boxplot() + 
+  ylab(NULL) + 
+  theme_light()
+g2.3 <- df %>%
+  ggplot(aes(x = Degree, y = F2)) + 
+  geom_boxplot() + 
+  ylab(NULL) + 
+  theme_light()
+g2.4 <- df %>%
+  ggplot(aes(x = Income, y = F2)) + 
+  geom_boxplot() + 
+  ylab(NULL) + 
+  theme_light()
+
+grid.arrange(grobs = list(g1.1, g1.2, g1.3, g1.4,
+             g2.1, g2.2, g2.3, g2.4), nrow = 2)
+```
+violine plot
+```{r}
+g1.1 <- df %>%
+  ggplot(aes(x = AmznP, y = F1)) +
+  geom_violin() + 
+  ylab("F1 - Sport Band")
+g1.2 <- df %>%
+  ggplot(aes(x = Female, y = F1)) +
+  geom_violin() + 
+  ylab(NULL)
+g1.3 <- df %>%
+  ggplot(aes(x = Degree, y = F1)) + 
+  geom_violin() + 
+  ylab(NULL)
+g1.4 <- df %>%
+  ggplot(aes(x = Income, y = F1)) + 
+  geom_violin() + 
+  ylab(NULL)
+
+g2.1 <- df %>%
+  ggplot(aes(x = AmznP, y = F2)) +
+  geom_violin() + 
+  ylab("F2 - Smart Watch")
+g2.2 <- df %>%
+  ggplot(aes(x = Female, y = F2)) +
+  geom_violin() + 
+  ylab(NULL)
+g2.3 <- df %>%
+  ggplot(aes(x = Degree, y = F2)) + 
+  geom_violin() + 
+  ylab(NULL)
+g2.4 <- df %>%
+  ggplot(aes(x = Income, y = F2)) + 
+  geom_violin() + 
+  ylab(NULL)
+
+grid.arrange(grobs = list(g1.1, g1.2, g1.3, g1.4,
+             g2.1, g2.2, g2.3, g2.4), nrow = 2)
+```
+
+```{r}
+t1 <-t.test(F1 ~ Female, data = df)
+t1
+```
+
+Explore how income + amazon + two dimension
+```{r}
+p1 <- df %>%
+  ggplot( aes(x = AmznP, y = F1)) +
+  geom_boxplot(trim=TRUE) + 
+  facet_grid(cols = vars(Income))
+p2 <- df %>%
+  ggplot( aes(x = AmznP, y = F2)) +
+  geom_boxplot(trim=TRUE) + 
+  facet_grid(cols = vars(Income))
+grid.arrange(p1,p2)
+```
+amazon prime user who have a stronger 
+
+Female who have Amazon Prime account prefers 
+```{r}
+p1 <- df %>%
+  ggplot( aes(x = AmznP, y = F1)) +
+  geom_violin() + 
+  facet_grid(cols = vars(Female))
+p2 <- df %>%
+  ggplot( aes(x = AmznP, y = F2)) +
+  geom_violin() + 
+  facet_grid(cols = vars(Female))
+grid.arrange(p1,p2)
+```
+Strongest effect is (right conner)... female amazon prime owner showed a stronger preference for ability for sports... 
+
+
+Higher degree alwalys 
+```{r}
+aov(data = df, F1 ~ AmznP + Degree) %>%
+  summary()
+aov(data = df, F2 ~ AmznP + Degree) %>%
+  summary()
+```
+the effect of degree is not as effective as on F1 as on F2. Persue F1 cluster having an amazon account is good factor. Persue F2 target different degree level.
+
+
+# See if anova and aov print same results..
+
+Even in plus sign order matters...
+```{r}
+lm(data = df, F1 ~  Female + Degree + Income + AmznP) %>%
+  anova()
+```
+
+```{r}
+aov(data = df, F1 ~ AmznP + Female + Degree + Income) %>%
+  summary()
+```
+
+```{r}
+aov(data = df, F1 ~  Female + Degree + Income + AmznP) %>%
+  summary.lm()
+```
+No using lm method yield same result... but if you print in using anova this would be different 
+
+use `Anova` is different
+```{r}
+aov(data = df, F1 ~ AmznP + Female + Degree + Income) %>%
+  Anova(type = 2)
+```
+
+```{r}
+aov(data = df, F1 ~ AmznP + Female + Degree + Income) %>%
+  summary.lm()
+```
+`model.tables(type = "mean")`
+```{r}
+aov(data = df, F1 ~ Female + AmznP + Degree + Income) %>%
+  summary.lm()
+```
+
+

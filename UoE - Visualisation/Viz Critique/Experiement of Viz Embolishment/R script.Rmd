@@ -1,0 +1,52 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+Midmean Log-Absolute Error (MLAE) -> Interquartile + Mean Log-Absolute Error
+```{r}
+library(tidyverse)
+library(ggplot2)
+df <- read.csv(file.choose())
+df[df$chart_embellishment == "triangle", ]
+
+abbl <- with(df, df[chart_embellishment == "baseline"
+            &question_type == "absolute", ])
+
+abtr <- with(df, df[chart_embellishment == "triangle"
+            &question_type == "absolute", ])
+abqu <- with(df, df[chart_embellishment == "quadratic"
+            &question_type == "absolute", ])
+
+rlbl <- with(df, df[chart_embellishment == "baseline"
+            &question_type == "relative", ])
+
+rltr <- with(df, df[chart_embellishment == "triangle"
+            &question_type == "relative", ])
+rlqu <- with(df, df[chart_embellishment == "quadratic"
+            &question_type == "relative", ])
+
+```
+
+```{r}
+plot(density(abbl$log_error))
+lines(density(abtr$log_error), col = "blue")
+lines(density(abqu$log_error), col = "red")
+```
+```{r}
+plot(density(rlbl$log_error))
+lines(density(rltr$log_error), col = "blue")
+lines(density(rlqu$log_error), col = "red")
+```
+```{r}
+plot(density(abbl$judged_true), xlim = c(-100, 200))
+lines(density(abtr$judged_true), col = "blue")
+lines(density(abqu$judged_true), col = "red")
+
+hist(abbl$judged_true, xlim = c(-10,10), breaks = 10000)
+```
+```{r}
+plot(density(rlbl$judged_true), xlim = c(-100, 200))
+lines(density(rltr$judged_true), col = "blue")
+lines(density(rlqu$judged_true), col = "red")
+```

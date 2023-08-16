@@ -1,0 +1,257 @@
+---
+title: "map data"
+author: "Frank Liang"
+date: "07/10/2021"
+output: html_document
+---
+
+```{r}
+AIbyTopic %>%
+  group_by(Title) %>%
+  mutate(n = length(ProjectReference)) %>%
+  filter(n > 1) %>%
+  arrange(Title, ProjectReference) -> dup
+
+dup$x = 1:235
+dup %>%
+  mutate(x = x -1) %>%
+  dplyr::select(x, ProjectReference, Title) -> ruler
+
+dup %>%
+  left_join(ruler, by = c("x" = "x")) -> pair
+
+pair %>%
+  filter(Left(pair$ProjectReference.x, 10)  == Left(pair$ProjectReference.y, 10) & Title.x == Title.y) %>%
+  dplyr::select(Title.x, Title.y, ProjectReference.x, ProjectReference.y) -> pair_2
+```
+
+```{r}
+pair_2 
+
+AIbyTopic %>% 
+  dplyr::select(LeadROName, ProjectReference) -> id
+
+transfered_id <- read_csv("raw/transfered_projects.csv") %>% pull(value)
+
+AIbyTopic %>% 
+  filter(eval(parse(text = arg_f(transfered_id)))) %>%
+  dplyr::select(LeadROName) %>%
+  group_by(LeadROName) %>%
+  summarise(n = length(LeadROName)) -> dict
+
+
+pair_2 %>%
+  left_join(id, by = c("ProjectReference.x" = "ProjectReference")) %>%
+  rename(from = LeadROName) %>%
+  left_join(id, by = c("ProjectReference.y" = "ProjectReference")) %>%
+  rename(to = LeadROName) %>%
+  dplyr::select(from, to, ProjectReference.x, ProjectReference.y, Title.x) %>%
+  rename(title = Title.x)  -> link
+
+dict$x <-1:length(dict$LeadROName)
+dict <- dict[, -2]
+geocode <- read_csv("raw/geocode.csv")
+dict <- left_join(dict, geocode)
+dict <- dict[, -3]
+
+node <- rename(dict, id = x)
+
+library(magrittr)
+
+link %>% 
+  left_join(dict, by = c("from" = "LeadROName")) %>%
+  rename(from_x = x) %>%
+  left_join(dict, by = c("to" = "LeadROName")) %>%
+  rename(to_x = x) %>%
+  dplyr::select(from_x, to_x, ProjectReference.y, ProjectReference.x) %>%
+  rename(from = from_x) %>% rename(to = to_x) -> edge
+
+edge <- edge %>%
+  left_join(dplyr::select(AIbyTopic, ProjectReference,AwardPounds), by = c("ProjectReference.y" = "ProjectReference")) %>%
+  left_join(dplyr::select(AIbyTopic, ProjectReference,AwardPounds), by = c("ProjectReference.x" = "ProjectReference"))
+```
+
+```{r}
+library(igraph)
+library(visNetwork)
+
+nodes <- node %>%
+  rename(label = LeadROName)
+
+visNetwork(nodes, edge) %>%
+  visEdges(shadow = TRUE,
+           arrows =list(to = list(enabled = TRUE, scaleFactor = 2)))
+```
+
+How to place these on a map? <https://plotly.com/r/lines-on-maps/>
+
+```{r}
+library(plotly)
+library(dplyr)
+# airport locations
+air <- read.csv('https://raw.githubusercontent.com/plotly/datasets/master/2011_february_us_airport_traffic.csv')
+# flights between airports
+flights <- read.csv('https://raw.githubusercontent.com/plotly/datasets/master/2011_february_aa_flight_paths.csv')
+flights$id <- seq_len(nrow(flights))
+
+# map projection
+geo <- list(
+  scope = 'north america',
+  projection = list(type = 'azimuthal equal area'),
+  showland = TRUE,
+  landcolor = toRGB("gray95"),
+  countrycolor = toRGB("gray80")
+)
+
+fig <- plot_geo(locationmode = 'USA-states', color = I("red"))
+fig <- fig %>% add_markers(
+  data = air, x = ~long, y = ~lat, text = ~airport,
+  size = ~cnt, hoverinfo = "text", alpha = 0.5
+)
+fig <- fig %>% add_segments(
+    data = group_by(flights, id),
+    x = ~start_lon, xend = ~end_lon,
+    y = ~start_lat, yend = ~end_lat,
+    alpha = 0.3, size = I(1), hoverinfo = "none"
+  )
+fig <- fig %>% layout(
+    title = 'Feb. 2011 American Airline flight paths<br>(Hover for airport names)',
+    geo = geo, showlegend = FALSE, height=800
+  )
+
+fig
+```
+
+```{r}
+node
+edge
+edge %>% left_join(node, by = c("from" = "id")) %>%
+  rename(lat_from = latitude) %>% rename(lng_from = longitude) %>%
+  left_join(node, by = c("to" = "id")) %>%
+  rename(lat_to = latitude) %>% rename(lng_to = longitude) -> edges
+
+```
+
+```{r}
+
+token = "pk.eyJ1IjoiZmxpYW5ndWsiLCJhIjoiY2t1Z3dkYXJ4MXI3ZDMybXR1czhjMnN3YSJ9.h8KmaN_vC0whFf34x1m84Q"
+
+Sys.setenv("MAPBOX_TOKEN" = token)
+
+plot_mapbox() %>%
+  add_markers(data = node, x = ~longitude, y = ~latitude, color = I("red"), text = ~LeadROName) %>%
+  add_segments(data = edges, 
+    x = ~lng_from, xend = ~lng_to,
+    y = ~lat_from, yend = ~lat_to, 
+    alpha = 0.3, size = I(1), color = I("red")
+    ) %>%
+  layout(mapbox = list(
+    style = "dark",
+    zoom = 3.5, 
+    center = list(lat=55.3781, lon=-3.4360)
+  ))
+```
+
+mapbox = list( style="stamen-terrain", center= list(lon=180)), coloraxis = list(colorscale = "Viridis")
+
+```{r}
+stand <- function(v) {
+  (v - min(v) + 1)/(max(v) - min(v) + 1)
+}
+
+edge<- edge %>%
+  mutate(r = stand(AwardPounds.x) + 1)
+
+edge %>%
+  group_by(to) %>%
+  mutate(r1 = sum(r)) %>%
+  ungroup() %>%
+  group_by(from) %>%
+  mutate(r2 = sum(r)) %>%
+  ungroup() -> from_to
+  
+from_to %>%
+  dplyr::select(from, r2) -> from_r2
+from_to %>%
+  dplyr::select(to, r1) -> to_r1
+
+to_r1 %>% left_join(from_r2, by = c("to" = "from")) %>%
+  mutate(r2 = replace(r2, is.na(r2), 0)) %>%
+  mutate(r = r1 - r2) %>%
+  filter(r < 0)
+# not a good measure because there are one that are not ....
+
+edge %>%
+  group_by(to) %>%
+  mutate(r1 = length(r)) %>%
+  ungroup() %>%
+  group_by(from) %>%
+  mutate(r2 = length(r)) %>%
+  ungroup() -> from_to
+from_to %>%
+  dplyr::select(from, r2) -> from_r2
+from_to %>%
+  dplyr::select(to, r1) -> to_r1
+to_r1 %>% full_join(from_r2, by = c("to" = "from")) %>%
+  mutate(r2 = replace(r2, is.na(r2), 0)) %>%
+  mutate(r1 = replace(r1, is.na(r1), 0)) %>%
+  mutate(n = r1 - r2) %>%
+  rename(id = to) %>% 
+  group_by(id) %>%
+  summarise(n = mean(n))-> net_flow
+
+
+
+node <- rename(dict, id = x) # refresh node
+node %>%
+  left_join(net_flow, by = c("id" = "id")) %>%
+  mutate(r = n + max(n)) -> node
+node %>%
+  left_join(to_r1, by = c("id" = "to")) %>%
+  rename(r = r1) -> node
+
+plot_mapbox() %>%
+  add_markers(data = node, x = ~longitude, y = ~latitude, 
+              color = I("red"), 
+              text = ~LeadROName, alpha = 0.5,
+              hoverinfo = "text",size = ~r) %>%
+  add_segments(data = edges, 
+    x = ~lng_from, xend = ~lng_to,
+    y = ~lat_from, yend = ~lat_to, 
+    alpha = 0.3, size = I(1), color = I("red"), hoverinfo = "none"
+    ) %>%
+  layout(mapbox = list(
+    style = "dark",
+    zoom = 4.2, 
+    center = list(lat=54.3781, lon=-3.4360)
+  ))
+```
+[inflow chart](asset/r5.5%20inflow.html)
+
+# Visualisation by number of flow goes into
+
+```{r}
+node <- rename(dict, id = x) # refresh node
+node %>%
+  left_join(from_r2, by = c("id" = "from")) %>%
+  rename(r = r2) %>%
+  mutate(r = replace(r, is.na(r), 0)) -> node
+
+plot_mapbox() %>%
+  add_markers(data = node, x = ~longitude, y = ~latitude, 
+              color = I("blue"), 
+              text = ~LeadROName, alpha = 0.5,
+              hoverinfo = "text",size = ~r) %>%
+  add_segments(data = edges, 
+    x = ~lng_from, xend = ~lng_to,
+    y = ~lat_from, yend = ~lat_to, 
+    alpha = 0.3, size = I(1), color = I("blue"), hoverinfo = "none"
+    ) %>%
+  layout(mapbox = list(
+    style = "dark",
+    zoom = 4.2, 
+    center = list(lat=54.3781, lon=-3.4360)
+  ))
+```
+[outflow chart](asset/r5.5%20outflow.html)
+

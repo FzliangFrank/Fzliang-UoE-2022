@@ -1,0 +1,240 @@
+---
+title: "Case by Death"
+output: html_notebook
+editor_options: 
+  chunk_output_type: inline
+---
+
+#Import Data
+install packages
+```{r}
+#remotes::install_github("publichealthengland/coronavirus-dashboard-api-R-sdk")
+library(ukcovid19)
+#install.packages("SEIRfansy")
+library("SEIRfansy")
+
+```
+Set structures and filter and store in df:
+```{r}
+query_filters <- c(
+  'areaType=nation',
+  'areaName=England'
+)
+cases_and_deaths = list(
+  date = "date",
+  cumCasesBySpecimenDateRate = "cumCasesBySpecimenDateRate",
+  cumCasesByPublishDate = "cumCasesByPublishDate",
+  cumDeaths28DaysByDeathDate = "cumDeaths28DaysByDeathDate"
+  
+)
+df <- get_data(
+  filters = query_filters, 
+  structure = cases_and_deaths
+)
+View(df)
+```
+
+# Covid 19 
+Where does this data come from? [details about data](https://coronavirus.data.gov.uk/details/about-data)
+How to use API? 
+[developer's guide](https://coronavirus.data.gov.uk/details/developers-guide#params-filters)
+
+
+Obviously, the biggest flaw of this reserach is that data is very frauded. The value of this model is that it provides an alternative methodology to evaluate non-vaccine/lockdown measure effectiveness. Same model could be applied to ... when more effective estmate of real covid-19 cases is used.
+
+
+
+## Prep
+```{r}
+df$date <- as.POSIXct(df$date)
+df = na.omit(df)
+```
+For curve[Sigmoid Curve](https://www.statforbiology.com/nonlinearregression/usefulequations#sygmoidal_curves)
+
+## 2020-02-01 - 2020-07-1
+```{r}
+filter <- (df$date >= "2020-02-01")&(df$date <= "2020-05-25")
+block1 <- df[filter,]
+
+#with(block1, plot(x = date, y = cumDeaths28DaysByDeathDate))
+
+#install.packages("drc")
+library("drc")
+model.G <-  drm(cumDeaths28DaysByDeathDate ~ date, fct = G.4(), data = block1)
+model.LG <- drm(cumDeaths28DaysByDeathDate ~ date, fct = LL.3(), data = block1)
+model.W2 <- drm(cumDeaths28DaysByDeathDate ~ date, fct = W2.4(), data = block1)
+model.W1.3 <- drm(cumDeaths28DaysByDeathDate ~ date, fct = W1.3(), data = block1)
+
+```
+
+```{r}
+with(block1, 
+     plot(x = date, y = cumDeaths28DaysByDeathDate, type = "h",
+          col = "grey51", main = "Accumulative Death from March to June", 
+          xlab = "month",
+            ylab = "Cumulative Death")
+     )
+#lines(x = block1$date, y = fitted(model.G), col = "red")
+lines(x = block1$date, y = fitted(model.LG), col = "blue")
+lines(x = block1$date, y = fitted(model.W2), col = "green")
+lines(x = block1$date, y = fitted(model.W1.3), col = "red")
+
+legend(as.POSIXct("2020-03-01"), 31000, legend=c("Log Logistic", "Weibull 2", "Weibull type 1 (3 parameter)"),lty=1:1,
+       col=c("blue","green","red"), cex=0.8,
+       title="Line types", text.font=4)
+
+summary(model.W1)
+AIC(model.W1)
+
+summary(model.W1.3)
+AIC(model.W1.3)
+```
+
+## 2020-08-15 - 2020-12-15
+```{r}
+f2 <- (df$date >= "2020-08-13")&(df$date < "2020-10-31")
+block2 <-  df[f2,]
+
+#with(block2, plot(x = date, y = cumDeaths28DaysByDeathDate))
+
+model.2.G <-  drm(cumDeaths28DaysByDeathDate ~ date, fct = G.4(), data = block2)
+model.2.W1 <- drm(cumDeaths28DaysByDeathDate ~ date, fct = W1.4(), data = block2)
+model.2.W2 <- drm(cumDeaths28DaysByDeathDate ~ date, fct = W2.4(), data = block2)
+#model.2.L <- drm(cumDeaths28DaysByDeathDate ~ date, fct = EXD.2(), data = block2)
+model.2.LL <- drm(cumDeaths28DaysByDeathDate ~ date, fct = LL.4(), data = block2)
+#nls <- nls(cumDeaths28DaysByDeathDate ~ SSweibull(date, a, b, c, d), data = block2)
+lm <- lm(log(cumDeaths28DaysByDeathDate) ~ date, data = block2)
+```
+
+```{r}
+with(block2, 
+     plot(x = date, y = cumDeaths28DaysByDeathDate,
+          type = "h",col = "grey51",main = "Accumulative Death from July to October",
+          xlab = "month",
+            ylab = "Cumulative Death"), 
+     )
+#lines(x = block2$date, y = fitted(model.2.G), col = "red")
+lines(x = block2$date, y = fitted(model.2.W1), col = "blue")
+lines(x = block2$date, y = fitted(model.2.W2), col = "green")
+lines(x = block2$date, y = fitted(model.2.LL), col = "purple")
+#lines(x = block2$date, y = fitted(nsl), col = "pink")
+lines(x = block2$date, y = fitted(lm), col = "pink")
+
+legend(as.POSIXct("2020-08-14"), 41400, legend=c("Weibull type 1", "Weibull 2", "Log Logistic"),lty=1:1,
+       col=c("blue","green","purple"), cex=0.8,
+       title="Line types", text.font=4)
+abline(h = 5.9345e+04  , col = "red")
+```
+Accroding to [John Hopkins University of Medcine](https://coronavirus.jhu.edu/data/mortality), the mean mortability rate is 2%. 
+```{r}
+
+1 - sd(resid(model.2.W1))/sd(block2$cumDeaths28DaysByDeathDate)
+1 - sd(resid(model.2.W2))/sd(block2$cumDeaths28DaysByDeathDate)
+1 - sd(resid(model.2.LL))/sd(block2$cumDeaths28DaysByDeathDate)
+1 - sd(resid(lm))/sd(block2$cumDeaths28DaysByDeathDate)
+
+summary(model.2.W2)
+
+```
+Accroding to UK gorvernment website, the new variant of the virus was first detected in September. The new variants is gradually replacing old virus, this has peaked on the 10th.It is hard to tell if the new variants is caused variation in the model(source:[Milton Keynes Lighthouse Laboratory](https://www.bbc.co.uk/news/health-55388846))
+
+So you wanna know if it casue the variant? easy. Do an estimate on the residual. 
+So 1224.993 extra death were deviated from the model. Accroding to [Wise, 2020](https://www-bmj-com.uoelibrary.idm.oclc.org/content/371/bmj.m4857),  1108 cases were identified in 13 December in different local authorities. Although the rell number could have been much higher. 
+
+> "Nick Loman, professor of microbial genomics and bioinformation at the University of Birmingham, told a briefing by the Science Media Centre on 15 December that the variant was first spotted in late September and now accounts for 20% of viruses sequenced in Norfolk, 10% in Essex, and 3% in Suffolk. “There are no data to suggest it had been imported from abroad, so it is likely to have evolved in the UK,” he said."
+
+> "Public Health England’s laboratory at Porton Down is currently working to find any evidence that the new variant increases or decreases the severity of disease."
+
+
+# Subsets
+
+Experiment split data: 
+1. use `subset` function. If you just cut off dataframe, r don't know how to join those two together
+2. `xlim` and `ylim` has to be a vector of two. Specifing the max and min 
+```{r}
+# subset data
+
+ts <- subset(block1, date < "2020-06-1", c(date, cumDeaths28DaysByDeathDate))
+vs <- subset(block1, date >= "2020-06-1", c(date, cumDeaths28DaysByDeathDate))
+
+
+model <- drm(cumDeaths28DaysByDeathDate ~ date, fct = W1.4(), data = ts)
+
+
+with(
+  ts, plot(x = date, y = cumDeaths28DaysByDeathDate, 
+              xlim = as.POSIXct(c("2020-03-01","2020-07-1")),
+                                ylim = c(0, 45000))
+  )
+with(vs, points(x = date, y = cumDeaths28DaysByDeathDate, col = "grey"))
+lines(x = ts$date, y = fitted(model), col = "purple")
+
+```
+You can use following code to find out the numerical intervel for representing each day.
+```
+as.numeric(block1$date)
+1593558000 - 1593471600
+block1$day <- ceiling((as.numeric(block1$date) - min(as.numeric(block1$date)))/86400)
+block1$day
+```
+# predict(model, vs)
+```{r}
+# set functions to convert to days 
+toDays <- function(x){
+ day <-  ceiling((as.numeric(x) - min(as.numeric(x)))/86400)
+ return(day)
+}
+
+df$date <- as.POSIXct(df$date)
+df = na.omit(df)
+```
+First Block
+```{r}
+filter1 <- (df$date >= "2020-02-01")&(df$date <= "2020-06-15")
+block1 <- df[filter1,]
+block1$day = toDays(block1$date)
+
+ts <- subset(block1, date < "2020-05-25", c(day, cumDeaths28DaysByDeathDate))
+vs <- subset(block1, date >= "2020-05-25", c(day, cumDeaths28DaysByDeathDate))
+ts
+
+model <- drm(cumDeaths28DaysByDeathDate ~ day, fct = W1.4(), data = ts)
+
+with(ts, plot(x = day, y = cumDeaths28DaysByDeathDate, 
+              xlim = c(0,122),
+            ylim = c(0, 45000), col = "grey51", type = "h")
+  )
+with(vs, points(x = day, y = cumDeaths28DaysByDeathDate, col = "grey87", type = "h"))
+lines(x = ts$day, y = fitted(model), col = "blue")
+
+predicted <- predict(model, vs)
+lines(x = vs$day, y = predicted, col = "skyblue")
+
+```
+```{r}
+filter2 <- (df$date >= "2020-08-13") & (df$date <= "2020-10-31")
+block2 <-  df[filter2,]
+block2$day = toDays(block2$date)
+
+ts.2 <- subset(block2, date < "2020-10-25", c(day, cumDeaths28DaysByDeathDate))
+vs.2 <- subset(block2, date >= "2020-10-25", c(day, cumDeaths28DaysByDeathDate))
+
+
+Weibull <- drm(cumDeaths28DaysByDeathDate ~ day, fct = W2.4(), data = ts.2)
+Loglogi <- drm(cumDeaths28DaysByDeathDate ~ day, fct = LL.4(), data = ts.2)
+lm <- lm(cumDeaths28DaysByDeathDate ~ exp(day), data = ts.2)
+
+model.2 = Weibull
+with(ts.2, plot(x = day, y = cumDeaths28DaysByDeathDate, 
+              xlim = c(0,111),
+            ylim = c(35000, 45000), col = "grey51", type = "h")
+  )
+with(vs.2, points(x = day, y = cumDeaths28DaysByDeathDate, col = "grey87", type = "h"))
+lines(x = ts.2$day, y = fitted(model.2), col = "blue")
+
+predicted <- predict(model.2, vs.2)
+lines(x = vs.2$day, y = predicted, col = "skyblue")
+
+cor(predicted,vs.2$cumDeaths28DaysByDeathDate)
+```
+*I have to rescale this to make sure training set model can validate validation sets. 

@@ -1,0 +1,207 @@
+---
+title: "4.2 unbalanced ANOVA"
+author: "Frank Liang"
+date: "10/05/2021"
+output: html_document
+editor_options: 
+  chunk_output_type: inline
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r message=FALSE, warning=FALSE}
+library(tidyverse)
+library(readxl)
+library(corrplot)
+factor_scores <- read_csv("factor_scores.csv")
+SmartWatch_Data_File <- read_excel("SmartWatch Data File.xlsx")
+```
+
+```{r}
+df <- SmartWatch_Data_File %>%
+  cbind(factor_scores[,c(2,3)])
+df <- df%>%
+  mutate(AmznP = factor(AmznP)) %>%
+  mutate(Female = factor(Female)) %>%
+  mutate(Degree = factor(Degree)) %>%
+  mutate(Income = factor(Income))
+
+levels(df$AmznP)
+```
+
+```{r message=FALSE, warning=FALSE}
+library(nlme)
+library(car)
+```
+
+# Heterosedaticty Check
+Test homogentity of variance. 
+```{r}
+fligner.test(data = df, PA1 ~ AmznP)
+fligner.test(data = df, PA1 ~ Female)
+fligner.test(data = df, PA1 ~ Degree)
+fligner.test(data = df, PA1 ~ Income)
+```
+```{r}
+fligner.test(data = df, PA2 ~ AmznP)
+fligner.test(data = df, PA2 ~ Female)
+fligner.test(data = df, PA2 ~ Degree)
+fligner.test(data = df, PA2 ~ Income)
+```
+
+```{r}
+#replications(data = df, F1 ~  Female*Degree*Income*AmznP)
+```
+
+```{r}
+attach(df)
+r <- replications(data = df, F1 ~  Female*Degree*Income*AmznP)
+```
+
+```{r}
+r$`Female:AmznP` %>%
+  chisq.test()
+r$`Degree:Income` %>%
+  chisq.test()
+r$`Degree:AmznP` %>%
+  chisq.test()
+r$`Income:AmznP` %>%
+  chisq.test()
+r$`Female:Income` %>%
+  chisq.test()
+```
+
+```{r}
+
+g <- r$`Degree:Income`
+g <- r$`Degree:AmznP`
+g <- r$`Income:AmznP`
+g <- r$`Female:Income`
+
+chisq.test(g)$residual %>%
+  corrplot(is.corr = FALSE)
+```
+
+
+```{r}
+fligner.test(data = df, PA2 ~ AmznP)
+fligner.test(data = df, PA2 ~ Female)
+fligner.test(data = df, PA2 ~ Degree)
+fligner.test(data = df, PA2 ~ Income)
+```
+All variable are not significant except Income. Equal variance is challenged for Income 
+```{r}
+with(df, summary(PA1))
+with(df, summary(PA2))
+```
+
+
+
+# One Way Anova
+```{r}
+aov(data = df, PA1 ~ Female) %>%
+  summary.lm()
+```
+
+```{r}
+aov(data = df, PA1 ~ AmznP) %>%
+  summary.lm()
+```
+```{r}
+aov(data = df, PA1 ~ Degree) %>%
+  summary.lm()
+```
+
+```{r}
+aov(data = df, PA1 ~ Income) %>%
+  summary.lm()
+```
+```{r}
+aov(data = df, PA2 ~ AmznP) %>%
+  summary.lm()
+aov(data = df, PA2 ~ Female) %>%
+  summary.lm()
+aov(data = df, PA2 ~ Degree) %>%
+  summary.lm()
+aov(data = df, PA2 ~ Income) %>%
+  summary.lm()
+
+```
+# Exploratoral Factorial
+```{r}
+replications(PA1 ~ AmznP*Female*Degree, df)
+```
+
+
+```{r}
+interaction.plot(df$Amzn, df$Female, df$PA1)
+interaction.plot(df$Amzn, df$Degree, df$PA1)
+interaction.plot(df$Female, df$Degree, df$PA1)
+interaction.plot(df$Income, df$Amzn, df$PA1)
+interaction.plot(df$Income, df$Degree, df$PA1)
+interaction.plot(df$Income, df$Female, df$PA1)
+```
+```{r}
+lm(data = df, PA1 ~ AmznP*Female*Degree) %>%
+  Anova(type = 3) 
+lm(data = df, PA1 ~ Income*Degree) %>%
+  Anova(type = 3)
+lm(data = df, PA1 ~ Income*Female) %>%
+  Anova(type = 3)
+lm(data = df, PA1 ~ Income*AmznP) %>%
+  Anova(type = 3)
+
+interaction.plot(df$Amzn, df$Female, df$PA2)
+interaction.plot(df$Amzn, df$Degree, df$PA2)
+
+```
+
+```{r}
+lm(data = df, PA2 ~ AmznP*Female*Degree) %>%
+  Anova(type = 3) 
+lm(data = df, PA2 ~ Income*Degree) %>%
+  Anova(type = 3)
+lm(data = df, PA2 ~ Income*Female) %>%
+  Anova(type = 3)
+lm(data = df, PA2 ~ Income*AmznP) %>%
+  Anova(type = 3)
+
+interaction.plot(df$Amzn, df$Female, df$PA2)
+interaction.plot(df$Amzn, df$Degree, df$PA2)
+interaction.plot(df$Female, df$Degree, df$PA2)
+interaction.plot(df$Income, df$Amzn, df$PA2)
+interaction.plot(df$Income, df$Degree, df$PA2)
+interaction.plot(df$Income, df$Female, df$PA2)
+```
+
+
+
+```{r}
+plot.design(df$PA1 ~ df$AmznP*df$Female*df$Degree)
+```
+# Multi varit analysis
+```{r}
+y1 <- df[,(1:4)]
+y2 <- df[,(5:7)]
+
+attach(df)
+names(df)
+
+y1 <- cbind(ConstCom, TimelyInf, TaskMgm, DeviceSt)
+manova(y1 ~ AmznP + Female + Degree + Income) %>%
+  summary.aov()
+```
+
+```{r}
+y2 <- cbind(Wellness, Athlete, Style)
+manova(y2 ~ AmznP+ Female + Degree + Income) %>%
+  summary.aov()
+```
+
+```{r}
+
+```
+
+

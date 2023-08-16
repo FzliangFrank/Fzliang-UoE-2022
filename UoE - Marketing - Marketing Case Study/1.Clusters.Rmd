@@ -1,0 +1,25 @@
+---
+title: "Markeingt Analysis"
+output: html_notebook
+editor_options: 
+  chunk_output_type: inline
+---
+```{r}
+SmartWatch_Data_File <- read_excel("SmartWatch Data File.xlsx")
+
+cus <- SmartWatch_Data_File[, (8:12)]
+cus
+
+value <- SmartWatch_Data_File[, (1:7)]
+value
+```
+Cluster Analysis: 
+```{r message=FALSE}
+library(pvclust)
+fit <- pvclust(value,method.hclust="ward")
+plot(fit)
+```
+```{r}
+
+```
+

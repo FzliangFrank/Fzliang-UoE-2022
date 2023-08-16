@@ -1,0 +1,430 @@
+---
+title: "rx Mutated Variables"
+author: "Frank Liang"
+date: "09/10/2021"
+output: html_document
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+# Choropleth Graph
+
+Most AI research active organization on a map exclude price higher than
+10 k and project that has been transferred. `choropleth.g` choropleth
+spikes map
+
+## blackbox
+
+### computation
+
+```{r}
+library(rgeos)
+library(raster)
+library(leaflet)
+library(base)
+library(sp)
+```
+
+```{r}
+UK <- getData("GADM", country = "GB", level = 2)
+crswgs84 <- CRS("+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs")
+
+cooked_csv %>% 
+  group_by(LeadROName) %>%
+  filter(price < 10000) %>% # filter out outliners accroding to
+  filter(!eval(parse(text = arg_f(transfered_id)))) %>% # filter out transferred project
+  summarise(x = mean(price)) %>% 
+  mutate(r = 50*((x - min(x))/(max(x) - min(x))) + 1) %>%
+  left_join(geocode) -> data
+data %>%
+  dplyr::select(longitude, latitude) %>% #long first lat second!
+  SpatialPoints(proj4string = crswgs84) -> data_sp
+
+mtrx <- gContains(UK, data_sp, byid = TRUE)
+
+mtrx_r <- colSums(data$r%*%mtrx)/colSums(mtrx)
+mtrx_x <- colSums(data$x%*%mtrx)/colSums(mtrx)
+mate <- data.frame(id = names(mtrx_r), r = as.numeric(mtrx_r), x = as.numeric(mtrx_x))
+
+UK$c <- mate$r
+UK$data <- mate$x
+```
+
+### Make Spikes
+
+```{r}
+# remove transferred projects 
+cooked_csv %>% 
+  group_by(LeadROName) %>%
+  filter(!eval(parse(text = arg_f(transfered_id)))) %>%
+  filter(price < 10000) %>%
+  summarise(x = mean(price)) %>%
+  mutate(r = 50*((x - min(x))/(max(x) - min(x))) + 1) %>%
+  left_join(geocode) -> data
+
+#creat data
+rail <- c(1:length(data$x))
+plist = c()
+w = 0.06
+h = 0.1
+monitor <- NULL
+for (i in rail) {
+  la = as.numeric(data[i,5])
+  lg = as.numeric(data[i,6])
+   hi = sqrt(as.numeric(data[i,3]))
+   x_coord <- c(lg - w, lg, lg + w, lg - w)
+   y_coord <- c(la, la + h*hi, la, la)
+       xym <- cbind(x_coord, y_coord)
+       p = Polygon(xym)
+      ps = Polygons(list(p), ID = i)
+   plist = c(plist, ps)
+   
+   row = cbind(la, lg)
+   monitor = rbind(monitor, row)
+}
+spike <- sp::SpatialPolygons(plist)
+
+proj4string(spike) = CRS("+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs")
+
+plot(spike)
+spikes <- SpatialPolygonsDataFrame(spike, data)
+```
+
+### Graph Configurations
+
+```{r}
+library(plyr)
+data %>%
+  arrange(-r) %>%
+  head(10) %>%
+  mutate(LeadROName = revalue(LeadROName, c("The Alan Turing Institute" = "Alan Turing (LND)"))) %>%
+  mutate(LeadROName = revalue(LeadROName, c("University of Southampton" = "Southampton"))) %>%
+  mutate(LeadROName = revalue(LeadROName, c("University of Bath" = "Bath"))) %>%
+  mutate(LeadROName = revalue(LeadROName, c("Newcastle University" = "Newcastle"))) %>%
+  mutate(LeadROName = revalue(LeadROName, c("University of Surrey" = "Surrey"))) %>%
+  mutate(LeadROName = revalue(LeadROName, c("Heriot-Watt University" = "Heriot-Watt (EB)"))) %>%
+  mutate(LeadROName = revalue(LeadROName, c("University of Bristol" = "Bristol"))) %>%
+  mutate(LeadROName = revalue(LeadROName, c("University of York" = "York"))) %>%
+  mutate(LeadROName = revalue(LeadROName, c("University of Strathclyde" = "Strathclyde (GLA)"))) %>%
+  rows_delete(tibble(LeadROName = "Royal Veterinary College")) -> text_label
+
+text_label %>%
+  rows_delete(tibble(LeadROName = "Heriot-Watt (EB)")) %>%
+  rows_delete(tibble(LeadROName = "Strathclyde (GLA)")) -> text_label1
+
+text_label %>%
+  filter(LeadROName == "Heriot-Watt (EB)" | LeadROName ==  "Strathclyde (GLA)") %>%
+  rows_update(tibble(LeadROName = "Heriot-Watt (EB)", longitude = -2) ) %>%
+  rows_update(tibble(LeadROName = "Strathclyde (GLA)", longitude = -5) ) -> text_label2
+```
+
+```{r}
+mypal <- colorNumeric(palette = "OrRd", domain = UK$data, na.color = "transparent")
+mypal_2 <- colorNumeric(palette = "OrRd", domain = sqrt(spikes$x), na.color = "transparent")
+text_style <- list(
+        "color" = "black",
+        "font-family" = "Futura",
+        "font-style" = "bold",
+        "text-shadow" = "3px 3px rgba(0,0,0,0.25)",
+        "text-outline" = "white"
+      )
+leaflet() %>% 
+  setView(lat = 55.3781, lng = -3.4360, zoom = 5) %>% 
+  addProviderTiles(providers$CartoDB.PositronNoLabels) %>% 
+  addPolygons(data = UK, stroke = TRUE, 
+              fillColor = ~mypal(data),
+              fillOpacity = 0.6, col = "black", weight = 0.4,
+              highlightOptions = highlightOptions(opacity = 1,
+                                                  weight = 1.5,
+                                                  bringToFront = FALSE),
+              label = paste(UK$NAME_2, round(UK$data))
+  ) %>%
+  addLegend("bottomright", pal = mypal, values = UK$data, labFormat = labelFormat(prefix = "£/d "), opacity = 1) %>%
+  addPolygons(data = spikes, col = "black", stroke = TRUE, fillColor = ~mypal_2(sqrt(x)), fillOpacity = 1, weight = 1, opacity = 0.75,
+              highlightOptions = highlightOptions(fillOpacity = 2,
+                                                  weight = 2,
+                                                  bringToFront = TRUE),
+              label = paste(spikes$LeadROName, "£/d", round(spikes$x))
+              )  %>%
+  addLabelOnlyMarkers(data = text_label1, label = ~LeadROName, lat = ~latitude, lng = ~longitude, labelOptions = labelOptions(noHide = T, textsize = "12px", textOnly = TRUE,
+                                         direction =  "top", opacity = 0.7,
+                                         style = text_style), halo = TRUE, hc = "white"
+        ) %>%
+   addLabelOnlyMarkers(data = text_label2, label = ~LeadROName, lat = ~latitude, lng = ~longitude, labelOptions = labelOptions(noHide = T, textsize = "12px", textOnly = TRUE, 
+                                         direction =  "top", opacity = 0.7,
+                                         style = text_style)
+        ) 
+```
+
+# Explore the Transfered Project
+
+Output in this section: `net_flow` see three visualisation: `network.g`
+visualise network `inflow.g` visualise number of project transfered into
+RO, marked by red `outflow.g` visualise number of project transfered out
+of RO, marked by blue
+
+## Blackbox
+
+### pair transfered projects
+
+```{r}
+# transfered project in pairs `pair_2` should be a from_to 
+AIbyTopic %>%
+  group_by(Title) %>%
+  mutate(n = length(ProjectReference)) %>%
+  filter(n > 1) %>%
+  arrange(Title, ProjectReference) -> dup
+dup$x = 1:235
+dup %>%
+  mutate(x = x -1) %>%
+  dplyr::select(x, ProjectReference, Title) -> ruler
+dup %>%
+  left_join(ruler, by = c("x" = "x")) -> pair
+pair %>%
+  filter(Left(pair$ProjectReference.x, 10) == Left(pair$ProjectReference.y, 10) & Title.x == Title.y) %>%
+  dplyr::select(Title.x, Title.y, ProjectReference.x, ProjectReference.y) -> pair_2
+
+AIbyTopic %>% 
+  dplyr::select(LeadROName, ProjectReference) -> id
+
+AIbyTopic %>% 
+  filter(eval(parse(text = arg_f(transfered_id)))) %>%
+  dplyr::select(LeadROName) %>%
+  group_by(LeadROName) %>%
+  summarise(n = length(LeadROName)) %>%
+  mutate(x = 1:length(LeadROName)) %>%
+  left_join(geocode, by = c("LeadROName" = "LeadROName")) %>%
+  rename(id = x) %>% dplyr::select(id, LeadROName, latitude, longitude) -> node_raw
+
+pair_2 %>%
+  left_join(id, by = c("ProjectReference.x" = "ProjectReference")) %>%
+  rename(from = LeadROName) %>%
+  left_join(id, by = c("ProjectReference.y" = "ProjectReference")) %>%
+  rename(to = LeadROName) %>%
+  dplyr::select(from, to, ProjectReference.x, ProjectReference.y, Title.x) %>%
+  rename(title = Title.x) %>% 
+  left_join(node_raw, by = c("from" = "LeadROName")) %>%
+  rename(from_id = id) %>%
+  left_join(node_raw, by = c("to" = "LeadROName")) %>%
+  rename(to_id = id) %>%
+  dplyr::select(from_id, to_id, ProjectReference.y, ProjectReference.x) %>%
+  rename(from = from_id) %>% rename(to = to_id) -> edge
+```
+
+### Network Visualisation
+
+```{r}
+library(igraph)
+library(visNetwork)
+
+nodes <- node_raw %>%
+  rename(label = LeadROName)
+
+visNetwork(nodes, edge) %>%
+  visEdges(shadow = TRUE,
+           arrows =list(to = list(enabled = TRUE, scaleFactor = 2))) -> network.g
+```
+
+### Compute Netflow
+
+```{r}
+edge %>% left_join(node, by = c("from" = "id")) %>%
+  rename(lat_from = latitude) %>% rename(lng_from = longitude) %>%
+  left_join(node, by = c("to" = "id")) %>%
+  rename(lat_to = latitude) %>% rename(lng_to = longitude) -> edges
+
+stand <- function(v) {
+  (v - min(v) + 1)/(max(v) - min(v) + 1)
+}
+
+# compute netflow for each node
+edge %>%
+  group_by(to) %>%
+  mutate(r1 = length(to)) %>%
+  ungroup() %>%
+  group_by(from) %>%
+  mutate(r2 = length(to)) %>%
+  ungroup() -> from_to
+from_to %>%
+  dplyr::select(from, r2) -> from_r2
+from_to %>%
+  dplyr::select(to, r1) -> to_r1
+to_r1 %>% full_join(from_r2, by = c("to" = "from")) %>%
+  mutate(r2 = replace(r2, is.na(r2), 0)) %>%
+  mutate(r1 = replace(r1, is.na(r1), 0)) %>%
+  mutate(n = r1 - r2) %>%
+  rename(id = to) %>% 
+  group_by(id) %>%
+  summarise(n = mean(n))-> net_flow
+```
+
+
+```{r}
+# inflow map 
+token = "pk.eyJ1IjoiZmxpYW5ndWsiLCJhIjoiY2t1Z3dkYXJ4MXI3ZDMybXR1czhjMnN3YSJ9.h8KmaN_vC0whFf34x1m84Q"
+Sys.setenv("MAPBOX_TOKEN" = token)
+
+node_raw %>%
+  left_join(to_r1, by = c("id" = "to")) %>%
+  rename(r = r1) -> node_inflow
+
+plot_mapbox() %>%
+  add_markers(data = node_outflow, x = ~longitude, y = ~latitude, 
+              color = I("red"), 
+              text = ~LeadROName, alpha = 0.4,
+              hoverinfo = "text",size = ~r) %>%
+  add_segments(data = edges, 
+    x = ~lng_from, xend = ~lng_to,
+    y = ~lat_from, yend = ~lat_to, 
+    alpha = 0.3, size = I(1), color = I("red"), hoverinfo = "none"
+    ) %>%
+  layout(mapbox = list(
+    style = "dark",
+    zoom = 4.2, 
+    center = list(lat=54.3781, lon=-3.4360)
+  )) -> inflow.g
+```
+
+```{r}
+# outflow map
+node_raw %>%
+  left_join(from_r2, by = c("id" = "from")) %>% #just change id to to from
+  rename(r = r2) %>%
+  mutate(r = replace(r, is.na(r), 0)) -> node_outflow
+
+plot_mapbox() %>%
+  add_markers(data = node_outflow, x = ~longitude, y = ~latitude, 
+              color = I("blue"), 
+              text = ~LeadROName, alpha = 0.5,
+              hoverinfo = "text",size = ~r) %>%
+  add_segments(data = edges, 
+    x = ~lng_from, xend = ~lng_to,
+    y = ~lat_from, yend = ~lat_to, 
+    alpha = 0.3, size = I(1), color = I("blue"), hoverinfo = "none"
+    ) %>%
+  layout(mapbox = list(
+    style = "dark",
+    zoom = 4.2, 
+    center = list(lat=54.3781, lon=-3.4360)
+  )) -> outflow.g
+```
+
+```{r}
+# combine both
+plot_mapbox() %>%
+  add_segments(data = edges, 
+    x = ~lng_from, xend = ~lng_to,
+    y = ~lat_from, yend = ~lat_to, 
+    alpha = 0.1, size = I(1), color = I("red"), hoverinfo = "none"
+    ) %>%
+  add_markers(data = node_inflow, x = ~longitude, y = ~latitude, 
+              color = I("red"), 
+              text = ~LeadROName, alpha = 0.5,
+              hoverinfo = "text",size = ~r^2) %>%
+  add_markers(data = node_outflow, x = ~longitude, y = ~latitude, 
+              color = I("black"), 
+              text = ~LeadROName, alpha = 0.5,
+              hoverinfo = "text",size = ~r^2) %>%
+  layout(mapbox = list(
+    style = "dark",
+    zoom = 4.2, 
+    center = list(lat=54.3781, lon=-3.4360)
+  )) -> flowmap.g
+```
+
+# Project Overview
+
+one that filter out transferred project `overview_by_price.g`
+`overview_by_award.g` 
+## Configuration Box
+
+```{r}
+AIbyTopic %>%
+  mutate(StartDate = as.Date(StartDate, format = "%d/%m/%Y")) %>%
+  mutate(EndDate = as.Date(EndDate, format = "%d/%m/%Y")) %>%
+  mutate(duration = EndDate - StartDate) %>%
+  mutate(price = AwardPounds/as.numeric(duration)) %>%
+  filter(!eval(parse(text = arg_f(transfered_id)))) -> df
+
+df %>%
+  ggplot(aes(y = price, label = LeadROName, label1= Title, label2 = ProjectReference)) + 
+  geom_linerange(aes(xmin = StartDate, xmax = EndDate, y = price), color = "#363636") +
+  geom_point(aes(x = StartDate), color = "#363636") + 
+  geom_point(aes(x = EndDate), color = "blue") -> g
+
+ggplotly(g) %>%
+  style(traces = 2, text = paste(df$StartDate,"\n",df$duration, "days")) %>%
+  style(traces = 1, text = paste( df$PIFirstName, df$PISurname,"\n",df$duration, "days")) %>%
+  style(traces = 3, customdata = df$GTRProjectUrl, text = paste(df$EndDate,"\n", df$LeadROName, "\n",df$Title)) %>%
+  onRender("
+    function(el) { 
+      el.on('plotly_click', function(d) { 
+        var url = d.points[0].customdata;
+        window.open(url);
+      });
+    }
+  ") -> overview_by_price.g #set up click event that open URL
+```
+
+```{r}
+AIbyTopic %>%
+  mutate(StartDate = as.Date(StartDate, format = "%d/%m/%Y")) %>%
+  mutate(EndDate = as.Date(EndDate, format = "%d/%m/%Y")) %>%
+  mutate(duration = EndDate - StartDate) %>%
+  mutate(price = AwardPounds/as.numeric(duration)) -> df
+
+df %>%
+  ggplot(aes(y = AwardPounds, label = LeadROName, label1= Title, label2 = ProjectReference)) + 
+  geom_linerange(aes(xmin = StartDate, xmax = EndDate, y = AwardPounds), color = "#363636") +
+  geom_point(aes(x = StartDate), color = "#363636") + 
+  geom_point(aes(x = EndDate), color = "#e8516f") -> g
+
+ggplotly(g) %>%
+  style(traces = 2, text = paste(df$StartDate,"\n",df$duration, "days")) %>%
+  style(traces = 1, text = paste( df$PIFirstName, df$PISurname,"\n",df$duration, "days")) %>%
+  style(traces = 3, customdata = df$GTRProjectUrl, text = paste(df$EndDate,"\n", df$LeadROName, "\n",df$Title)) %>%
+  onRender("
+    function(el) { 
+      el.on('plotly_click', function(d) { 
+        var url = d.points[0].customdata;
+        window.open(url);
+      });
+    }
+  ") -> overview_by_award.g #set up click event that open URL
+overview_by_award.g
+```
+
+# Show Density if Durationa and Award Pounds
+```{r}
+library(ggExtra)
+df <- cooked_csv
+df %>% 
+  filter(!eval(parse(text = arg_f(transfered_id)))) %>% #filter out the weirdly expensive ones 
+  ggplot(aes(x = duration, y = price)) +
+  geom_point() + 
+  geom_hline(yintercept = 10000, alpha = 0.2, col = "blue") + 
+  geom_hline(yintercept = 700, alpha = 0.2, col = "blue") -> g
+  
+ggMarginal(g) -> marginal
+```
+
+
+```{r}
+save(overview_by_award.g,
+     overview_by_price.g, 
+     net_flow,
+     network.g,
+     inflow.g,
+     outflow.g,
+     flowmap.g,
+     choropleth.g, file = "RData/vis.RData")
+```
+
+```{r}
+flowmap.g
+network.g
+net_flow %>% arrange(-n) %>%
+  left_join(unique(node), by = c("id" = "id"))
+```
+

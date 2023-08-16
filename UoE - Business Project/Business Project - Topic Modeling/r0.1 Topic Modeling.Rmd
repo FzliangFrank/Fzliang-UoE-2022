@@ -1,0 +1,66 @@
+---
+title: "r0 topic modeling"
+author: "Frank Liang"
+date: "30/08/2021"
+output: html_document
+---
+
+```{r}
+library(topicmodels)
+library(tm)
+library(tidyverse)
+
+data("AssociatedPress")
+inspect(AssociatedPress[1:5, 1:5])
+
+AssociatedPress %>% class()
+```
+> AssociatedPress %>% class()
+[1] "DocumentTermMatrix"    "simple_triplet_matrix"
+
+```{r}
+mod <- LDA(AssociatedPress,k = 10, control = list(seed = 12))
+
+```
+control	
+A named list of the control parameters for estimation or an object of class "LDAcontrol".
+
+```{r}
+library(tidytext)
+library(dplyr)
+tidy(mod, matrix = 'beta') %>%
+  group_by(topic) %>%
+  top_n(10, beta) %>% # return 10 rows, ordering by beta. Extract top 10 beta values
+  ungroup() %>%
+  arrange(topic, -beta) -> topic
+```
+In above topic modeling you only select 10 terms with high beta value
+
+See which topic is about:
+```{r}
+library(ggplot2)
+
+topic %>%
+  mutate(term = reorder(term, beta)) %>%
+  ggplot(aes(fill = factor(topic), y = term, x = beta)) +
+  geom_col() +
+  facet_wrap(~ topic, scales = "free") #issue scales = free so they do not take all variables
+```
+
+```{r}
+library(stm)
+data("AssociatedPress", package = "topicmodels")
+
+ap_dfm <- tidy(AssociatedPress) %>% 
+  cast_dfm(document = document, term = term, value = count)
+
+ap_lda <- stm(ap_dfm, 
+              K = 2, 
+              verbose = FALSE, 
+              init.type = "LDA")
+```
+
+```{r}
+
+```
+

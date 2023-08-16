@@ -1,0 +1,100 @@
+---
+title: "R Notebook"
+output: html_notebook
+editor_options: 
+  chunk_output_type: inline
+---
+
+# Covid API provided by UK government
+```{r}
+library(ukcovid19)
+query_filters <- c(
+  'areaType=nation',
+  'areaName=England'
+)
+cases_and_deaths = list(
+  date = "date",
+  cumCasesBySpecimenDateRate = "cumCasesBySpecimenDateRate",
+  cumDeaths28DaysByDeathDate = "cumDeaths28DaysByDeathDate"
+)
+
+df <- get_data(
+  filters = query_filters, 
+  structure = cases_and_deaths
+)
+```
+
+```{r message=FALSE, warning=FALSE}
+library(ggplot2)
+library(tidyverse)
+library("drc")
+library(plotly)
+```
+
+```{r}
+# define a functions to convert to days 
+toDays <- function(x){
+ day <-  ceiling((as.numeric(x) - min(as.numeric(x)))/86400)
+ return(day)
+}
+
+df$date <- as.POSIXct(df$date)
+df = na.omit(df)
+```
+
+# Overview - Up-todate Covid Situation
+```{r}
+startDate = "2021-03-01"
+endDate = "2021-7-27"
+
+filter <- (df$date >= startDate)&(df$date <= endDate)
+x <- df[filter,] %>%
+  ggplot(aes(x = date, y = cumDeaths28DaysByDeathDate)) + 
+  geom_line(color = "blue") + 
+  ylab("cumulative death") + 
+  theme(panel.border = element_blank(),
+          panel.grid.major = element_blank(),
+          panel.grid.minor = element_blank(),
+          panel.background = element_rect(fill = "#fafafa"),
+          plot.background = element_rect(fill = "white")
+        )
+ggplotly(x, tooltip = c("date"))
+```
+
+
+
+# Select Time Periord For Analysis
+```{r}
+startDate = "2021-02-23"
+endDate = "2021-7-26"
+
+cutPoint = "2021-05-23"
+
+filter1 <- (df$date >= startDate)&(df$date <= endDate)
+block1 <- df[filter1,]
+block1$day = toDays(block1$date)
+
+ts <- subset(block1, date < cutPoint , c(date, day, cumDeaths28DaysByDeathDate))
+vs <- subset(block1, date >= cutPoint, c(date, day, cumDeaths28DaysByDeathDate))
+ts
+
+#Weibull <- drm(cumDeaths28DaysByDeathDate ~ day, fct = W1.3(), data = ts)
+```
+## Viz
+```{r}
+#calcuate xlim
+ts$cumDeaths28DaysByDeathDate %>%
+  min() -> ymin
+vs$cumDeaths28DaysByDeathDate %>%
+  max() -> ymax
+vs$day %>%
+  max() -> xmax
+with(ts, plot(x = day, y = cumDeaths28DaysByDeathDate, 
+              xlim = c(0, xmax), main = "Validation",
+            ylim = c(ymin,ymax), col = "grey51", type = "h",
+            xlab = "Days since day 0",
+            ylab = "Cumulative Death")
+  )
+with(vs, points(x = day, y = cumDeaths28DaysByDeathDate, col = "grey87", type = "h"))
+```
+

@@ -1,0 +1,90 @@
+---
+title: "R Notebook"
+output: html_notebook
+editor_options: 
+  chunk_output_type: inline
+---
+
+```{r message=FALSE, warning=FALSE}
+library("psych")
+library ("GPArotation")
+library("tidyverse")
+SmartWatch_Data_File <- read_excel("~/Dropbox/Projects/Marketing Case Study/SmartWatch Data File.xlsx")
+```
+
+```{r}
+df <- SmartWatch_Data_File[, (1:7)]
+R <- cor(df)
+cortest.bartlett(R, n=2236)
+KMO(R)
+```
+```{r}
+library(MASS)
+
+X <- cor(df) 
+iX <- ginv(X) 
+S2 <- diag(diag((iX^-1)))
+AIS <- S2%*%iX%*%S2                      # anti-image covariance matrix
+IS <- X+AIS-2*S2                         # image covariance matrix
+Dai <- sqrt(diag(diag(AIS)))             # The diagonals of the anti-image correlation matrix diagonals should be &gt; 0.5
+IR <- ginv(Dai)%*%IS%*%ginv(Dai)         # image correlation matrix
+AIR <- ginv(Dai)%*%AIS%*%ginv(Dai)       # anti-image correlation matrix
+print(diag(AIR), row.names = FALSE)
+
+VSS.scree(R, main = "scree plot")
+```
+
+```{r}
+#A <- fa(df, nfactors=2, fm="pa", rotate="none")
+#print.psych(A, cut = 0, sort = TRUE)
+
+B <- fa(df, nfactors=2, fm="pa", rotate="promax")
+print.psych(B, sort = TRUE)
+```
+# Write into csv files
+```{r}
+fs <- B$scores %>%
+  as.data.frame()
+```
+density plot:
+```{r}
+with(fs, PA1 %>%
+       density() %>%
+       plot()
+     )
+with(fs, PA2 %>%
+       density() %>%
+       plot()
+     )
+```
+```{r}
+# write into 
+fa <- fs %>%
+  mutate(F1 = PA1 - min(PA1) + 1) %>%
+  mutate(F2 = PA2 - min(PA2) + 1)
+write.csv(fa, "./factor_scores.csv")
+```
+# Association with each element
+```{r}
+fs <- fs %>%
+  mutate(F1 = PA1 - min(PA1) + 1) %>%
+  mutate(F2 = PA2 - min(PA2) + 1)
+df <- cbind(df, fs[,c(3,4)])
+df[,c(7,5,6,8)]
+lm(data = df, F2 ~ Style + Wellness + Athlete +TimelyInf + TaskMgm + ConstCom + DeviceSt
+   ) %>%
+  summary()
+```
+```{r}
+lm(data = df, F2 ~ Style + Wellness + Athlete) %>%
+  summary()
+```
+```{r}
+lm(data = df, F2 ~ TimelyInf + TaskMgm + ConstCom + DeviceSt
+   ) %>%
+  summary()
+```
+```{r}
+with(df,
+     plot(F1,F2, type = "p"))
+```

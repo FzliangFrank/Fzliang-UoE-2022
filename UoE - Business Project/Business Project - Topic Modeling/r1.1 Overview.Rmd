@@ -1,0 +1,105 @@
+---
+title: "Analysis from Excel only"
+author: "Frank Liang"
+date: "20/08/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(ggplot2)
+library(tidyverse)
+library(readr)
+library(plotly)
+
+library(ggalluvial)
+#install.packages("ggalluvial")
+
+```
+
+```{r}
+AIbyTopic <- read_csv("raw/AIbyTopic.csv")
+complete <- read_csv("raw/complete.csv")
+```
+
+```{r}
+names(AIbyTopic)
+AIbyTopic %>%
+  select("Region","FundingOrgName","Department","AwardPounds") -> df
+
+df[is.na(df$Region) == FALSE,]
+```
+Here by Region is not considered because Nah of the data contain "Region" value..
+
+```{r}
+AIbyTopic %>%
+  dplyr::select("FundingOrgName",'ProjectCategory',"LeadROName",'AwardPounds') %>%
+  mutate(FundingOrgName = as.factor(FundingOrgName)) %>%
+  mutate(LeadROName = as.factor(LeadROName)) %>%
+  mutate(ProjectCategory = as.factor(ProjectCategory)) %>%
+  ggplot(aes(weight = AwardPounds, axis1 = FundingOrgName, axis2 = LeadROName, fill = FundingOrgName)) + 
+  geom_alluvium(aes(fill = FundingOrgName)) + 
+  geom_stratum(width = 1/12, fill = "black", color = "white") + 
+  #geom_label(stat = "stratum", aes(label = after_stat(stratum))) +
+  scale_x_discrete(limits = c("Funding Organisation", "Leading Research"), expand = c(.05, .05)) +
+  scale_fill_brewer(type = "qual", palette = "BuPu") 
+  
+```
+use `is_alluvia_form()` to test if data is alluvia form
+```{r}
+AIbyTopic$FundingOrgName %>% length()
+AIbyTopic$LeadROName %>% length()
+```
+
+```{r}
+AIbyTopic %>%
+  select(FundingOrgName,ProjectCategory,LeadROName,AwardPounds) %>%
+  mutate(FundingOrgName = as.factor(FundingOrgName)) %>%
+  mutate(LeadROName = factor(LeadROName)) %>%
+  mutate(ProjectCategory = as.factor(ProjectCategory)) %>%
+  group_by(LeadROName) %>%
+  summarize(sum = sum(AwardPounds), median = median(AwardPounds), mean = mean(AwardPounds)) 
+```
+
+, format = "%d/%m/%Y"
+
+```{r}
+theme_set(theme_grey())
+theme_set(theme(
+          panel.grid.major = element_blank(),
+          panel.grid.minor = element_blank(),
+          panel.border = element_blank(),
+          panel.background = element_rect(fill = "#f7f7f7"),
+          plot.background = element_rect(fill = "white")
+        ))
+
+
+detach("package:ggalluvial", unload=TRUE)
+detach("package:plotly", unload=TRUE)
+detach("package:tidyverse", unload = TRUE)
+detach("package:ggplot2", unload = TRUE)
+
+library(ggplot2)
+
+```
+
+```{r}
+AIbyTopic %>%
+  dplyr::select(FundingOrgName, LeadROName, AwardPounds, StartDate, EndDate, ProjectId, Title) %>%
+  mutate(StartDate = as.Date(StartDate, format = "%d/%m/%Y")) %>%
+  mutate(EndDate = as.Date(EndDate, format = "%d/%m/%Y")) %>%
+  mutate(duration = EndDate - StartDate) %>%
+  mutate(dailyAward = AwardPounds/as.numeric(duration)) %>%
+  ggplot(aes(y = dailyAward, label = LeadROName, label1= Title, label2 = ProjectId)) + 
+  geom_linerange(aes(xmin = StartDate, xmax = EndDate, y = dailyAward), color = "#363636") +
+  geom_point(aes(x = StartDate), color = "#363636") + 
+  geom_point(aes(x = EndDate), color = "blue") -> g
+
+ggplotly(g)
+```
+geom_text(label = AIbyTopic$LeadROName, size = 1, color = "black", nudge_x = 15, nudge_y = 50, alpha = 0.5)
+
+Above graph shows that some of data needs to be removed from analysis because those fundings overlap with earch other. 

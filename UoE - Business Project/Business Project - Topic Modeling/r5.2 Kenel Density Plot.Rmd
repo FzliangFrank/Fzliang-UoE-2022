@@ -1,0 +1,55 @@
+---
+title: "Combined Kenel Density Plot"
+author: "Frank Liang"
+date: "22/09/2021"
+output: html_document
+---
+
+Should look like this: ![](https://i.stack.imgur.com/1zMb9.jpg) Here is [the link](https://stackoverflow.com/questions/8545035/scatterplot-with-marginal-histograms-in-ggplot2) apparently need to use `ggExtra::ggMarginal()`
+
+```{r}
+library(readr)
+library(tidyverse)
+library(ggplot2)
+library(plotly)
+library(htmlwidgets)
+
+#install.packages("ggExtra")
+library(ggExtra)
+
+AIbyTopic <- read_csv("raw/AIbyTopic.csv")
+Cooked <- read_csv("raw/cooked.csv")
+
+theme_set(theme(
+          panel.grid.major = element_blank(),
+          panel.grid.minor = element_blank(),
+          panel.border = element_blank(),
+          panel.background = element_rect(fill = "#f7f7f7"),
+          plot.background = element_rect(fill = "white")
+        ))
+```
+
+```{r}
+df <- Cooked
+df %>% 
+  #filter(price < 10000) %>% #filter out the weirdly expensive ones 
+  ggplot(aes(x = duration, y = price)) +
+  geom_point() + 
+  geom_hline(yintercept = 10000, alpha = 0.2, col = "blue") + 
+  geom_hline(yintercept = 700, alpha = 0.2, col = "blue")-> g
+ggplotly(g) %>%
+  style(customdata = df$GTRProjectUrl) %>%
+  onRender("
+    function(el) { 
+      el.on('plotly_click', function(d) { 
+        var url = d.points[0].customdata;
+        window.open(url);
+      });
+    }
+  ") %>%
+  style(text = paste0("£",round(df$price*365/1000), " k per year","\n", round(as.numeric(df$duration)/365), " years"))
+```
+
+```{r}
+ggMarginal(g)
+```

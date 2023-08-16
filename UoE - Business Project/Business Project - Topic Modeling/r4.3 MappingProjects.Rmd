@@ -1,0 +1,424 @@
+---
+title: "Clustering Project"
+author: "Frank Liang"
+date: "17/09/2021"
+output: html_document
+---
+
+```{r}
+library(readr)
+library(tidyverse)
+library(ggplot2)
+library(plotly)
+
+AIbyTopic <- read_csv("raw/AIbyTopic.csv")
+complete <- read_csv("raw/complete.csv")
+
+theme_set(theme(
+          panel.grid.major = element_blank(),
+          panel.grid.minor = element_blank(),
+          panel.border = element_blank(),
+          panel.background = element_rect(fill = "#f7f7f7"),
+          plot.background = element_rect(fill = "white")
+        ))
+```
+
+```{r}
+#define a function to help you look up things in column
+lookUp <- function(df, col,term) {
+  df <- ungroup(df)
+  rgx = paste0("(?i)(",term,")")
+  filter(df, str_detect(pull(df, col), rgx))
+}
+#define function to look up research organisations
+RoLookUp <- function(str) {
+  lookUp(AIbyTopic,"LeadROName", str) %>%
+  pull(GTRProjectUrl) -> url
+  if (length(url) == 1) {
+    browseURL(url)
+  } else 
+    lookUp(AIbyTopic,"LeadROName", str) %>%
+    select(LeadROName, price, StartDate, EndDate, GTRProjectUrl) 
+}
+```
+
+# Explore Densities
+
+```{r}
+library(htmlwidgets)
+AIbyTopic %>%
+  mutate(StartDate = as.Date(StartDate, format = "%d/%m/%Y")) %>%
+  mutate(EndDate = as.Date(EndDate, format = "%d/%m/%Y")) %>%
+  mutate(duration = EndDate - StartDate) %>%
+  mutate(price = AwardPounds/as.numeric(duration)) -> df 
+
+cook <- AIbyTopic %>%
+  mutate(StartDate = as.Date(StartDate, format = "%d/%m/%Y")) %>%
+  mutate(EndDate = as.Date(EndDate, format = "%d/%m/%Y")) %>%
+  mutate(duration = EndDate - StartDate) %>%
+  mutate(price = AwardPounds/as.numeric(duration))
+#write_csv(cook, "raw/cooked.csv")
+```
+
+```{r}
+# density of price 
+df %>%
+  filter(price < 10000) %>%
+  ggplot(aes(x = price)) +
+  geom_density() +
+  xlim(0, 600)
+```
+
+Cutting Point: 0- 1500: normally distributed beyound is not really
+
+```{r}
+# density of durations: shows there are three peak
+df %>%
+  filter(price < 10000) %>%
+  ggplot(aes(x = duration)) +
+  geom_density()
+# look at institute normalise the data a bit 
+df %>%
+  filter(price < 10000) %>%
+  group_by(LeadROName) %>%
+  summarise(duration = mean(duration)) %>%
+  ggplot(aes(x = duration)) +
+  geom_density()
+```
+
+# Interactive Scattor Plot 
+```{r}
+
+df %>% 
+  #filter(price < 10000) %>% #filter out the weirdly expensive ones 
+  ggplot(aes(x = duration, y = price)) +
+  geom_point() + 
+  geom_hline(yintercept = 10000, alpha = 0.2, col = "blue") + 
+  geom_hline(yintercept = 700, alpha = 0.2, col = "blue")-> g
+ggplotly(g) %>%
+  style(customdata = df$GTRProjectUrl) %>%
+  onRender("
+    function(el) { 
+      el.on('plotly_click', function(d) { 
+        var url = d.points[0].customdata;
+        window.open(url);
+      });
+    }
+  ") %>%
+  style(text = paste0("£",round(df$price*365/1000), " k per year","\n", round(as.numeric(df$duration)/365), " years"))
+```
+
+```{r}
+# Explore individual 
+df %>%
+  filter(str_detect(df$LeadROName, "(?i)(Southampton)")) %>%
+  ggplot(aes(x = duration)) + 
+  geom_density()
+```
+
+```{r}
+library(cluster)    # clustering algorithms
+library(factoextra) # clustering algorithms & visualization
+
+
+df %>%
+  select(price, duration) %>%
+  filter(price < 1000) %>%
+  na.omit() %>%
+  mutate(duration = as.numeric(duration)) %>%
+  scale() %>%
+  get_dist() -> distMtr
+
+hcl <- hclust(distMtr)
+plot(hcl)
+rect.hclust(hcl, 5, border = "red")
+
+k <- kmeans(distMtr, centers = 4, nstart = 25) 
+fviz_cluster(k, data = distMtr) %>%
+  plotly_json()
+```
+
+# Map Goe Location Cluster
+
+```{r}
+library(leaflet)
+library(ggmap)
+library(tidygeocoder)
+#install.packages("tidygeocoder")
+#install.packages("ggmap")
+```
+
+API Key: AIzaSyAUIQA9pmYAzqRRSzS5FKer0KdC8zO0NIQ
+
+Don't loss it !!!! Don't share it !!!
+
+```{r}
+key = "AIzaSyAUIQA9pmYAzqRRSzS5FKer0KdC8zO0NIQ"
+client = "112014706699619003240"
+register_google(key, write = TRUE, client = client, account_type = "standard")
+```
+
+```{r}
+AIbyTopic %>%
+  mutate(StartDate = as.Date(StartDate, format = "%d/%m/%Y")) %>%
+  mutate(EndDate = as.Date(EndDate, format = "%d/%m/%Y")) %>%
+  mutate(duration = EndDate - StartDate) %>%
+  mutate(price = AwardPounds/as.numeric(duration)) %>%
+  group_by(LeadROName) %>%
+  summarise(n = length(LeadROName)) -> LeadRO
+
+#ggmap::geocode(location = LeadRO$LeadROName[1], output = "more")
+
+geocode <- LeadRO %>%
+  geocode(LeadROName, method = "arcgis", lat = latitude, long = longtiude)
+
+geocode%>%
+  filter(is.na(geocode[,3:4]) == TRUE)
+# Allan Tuning Institute was not find correct address 
+geocode <- geocode %>%
+  rows_update(tibble(latitude = 51.530237315026284, longtiude = -0.12726214468233626, LeadROName = "The Alan Turing Institute"), by = "LeadROName") %>%
+  rows_update(tibble(latitude = 51.481016045024035, longtiude = -0.2799970412623001, LeadROName = "The National Archives"), by = "LeadROName") %>%
+  rows_update(tibble(latitude = 51.403397012011766, longtiude = -0.30359239071764954, LeadROName = "Kingston University"), by = "LeadROName") %>%
+  rows_update(tibble(latitude = 53.803533716055156, longtiude = -1.5481857059380568, LeadROName = "Leeds Metropolitan University"), by = "LeadROName") %>%
+  rows_update(tibble(latitude = 51.52035059732551, longtiude = -0.1312827581755818, LeadROName = "Institute for Fiscal Studies"), by = "LeadROName") %>%
+  rows_update(tibble(latitude = 51.522953345898095, longtiude = -0.12803026930993505, LeadROName = "Institute of Education"), by = "LeadROName") %>%
+  rows_update(tibble(latitude = 43.33212325989216, longtiude = -2.9678375334275837, LeadROName = "Basque Centre for Climate Change bc3"), by = "LeadROName") %>%
+  rows_update(tibble(latitude = 51.74477519162197, longtiude = -1.4023974580558627, LeadROName = "Diamond Light Source"), by = "LeadROName") %>%
+  rows_update(tibble(latitude = 54.01001686525332, longtiude = -2.7862619428703916, LeadROName = "UK Ctr for Ecology & Hydrology fr 011219"), by = "LeadROName")
+
+lookUp(eocode, "LeadROName", "ecology")
+
+Geocode <- geocode %>%
+  rename(longitude = longtiude)
+write_csv(Geocode, "raw/geocode.csv")
+```
+
+The only geocode that has not been found is this: UK Ctr for Ecology & Hydrology fr 011219 4\
+54.01001686525332, -2.7862619428703916
+
+```{r}
+# insepect if everything is alright
+RO %>%
+  summarise(x = length(LeadROName)) %>%
+  left_join(geocode) -> data
+leaflet() %>%
+  setView(lat = 55.3781, lng = -3.4360, zoom = 5) %>%
+  addProviderTiles("Stamen.TonerLite") %>%
+  addCircleMarkers(data = data, lat = ~latitude, lng = ~longtiude,
+             stroke = FALSE,
+             radius = 5,
+             label = paste(data$LeadROName)
+             )
+```
+
+```{r}
+AIbyTopic %>%
+  mutate(StartDate = as.Date(StartDate, format = "%d/%m/%Y")) %>%
+  mutate(EndDate = as.Date(EndDate, format = "%d/%m/%Y")) %>%
+  mutate(duration = EndDate - StartDate) %>%
+  mutate(price = AwardPounds/as.numeric(duration)) %>%
+  mutate(LeadROName = as.factor(LeadROName)) %>%
+  group_by(LeadROName) -> RO
+```
+
+```{r}
+## Look at number of research projects
+RO %>%
+  summarise(r = length(LeadROName), total = sum(duration)) %>%
+  left_join(geocode) -> data
+## Look at how expensive
+RO %>%
+  dplyr::filter(price < 10000) %>%
+  #select(price, LeadROName, Title) %>%
+  arrange(-price) %>%
+  summarise(number = length(LeadROName), x = mean(price)) %>%
+  rows_delete(tibble(LeadROName = "The Alan Turing Institute")) %>% # delete Alan because this affect too much of our analysis
+  mutate(r = 50*((x - min(x))/(max(x) - min(x))) + 1) %>%
+  left_join(geocode[, -2], by = ("LeadROName" = "LeadROName")) -> data
+
+## look at project duration
+RO %>%
+  filter(price < 10000) %>%
+  summarise(x = mean(duration)) %>%
+  mutate(x = ceiling(as.numeric(x))) %>%
+  mutate(r = 20*(( x - min(x))/(max(x) - min(x))) +1) %>%
+  left_join(geocode[, -2]) -> data
+
+```
+
+```{r}
+library(leaflet)
+leaflet() %>%
+  setView(lat = 55.3781, lng = -3.4360, zoom = 5) %>%
+  addProviderTiles("Stamen.TonerLite") %>%
+  addCircleMarkers(data = data, lat = ~latitude, lng = ~longtiude,
+             radius = ~r,
+             stroke = FALSE,
+             label = paste(data$LeadROName #,round(data$x)
+                           )
+             )
+```
+
+# Check some individual RO
+
+```{r}
+RO %>%
+  lookUp("LeadROName", "basque") %>%
+  select(Title,price, StartDate, EndDate)
+RO %>%
+  lookUp("LeadROName", "delft") %>%
+  select(Title,price, StartDate, EndDate)
+
+RoLookUp("basque")
+RoLookUp("delft")
+
+RO %>% 
+  ggplot(aes(price)) + 
+  geom_density() -> g
+ggplotly(g)
+```
+
+1 WISER: Which Ecosystem Service Models Best Cap... 80.1 2014-01-01 2016-06-30 Same time ended around Brexit
+
+```{r}
+data <- RO %>%
+  filter(price < 10000)
+
+plot(density(data$AwardPounds))
+
+# cuttail cut everything
+data <- RO %>%
+  filter(price < 10000) %>%
+  filter(AwardPounds < quantile(data$AwardPounds, 0.7))
+
+model <- lm(data = data, AwardPounds ~ duration)  
+plot(model)
+summary(model)
+
+lm(data = data, AwardPounds ~ duration) 
+lm(data = data, AwardPounds ~ StartDate) %>% summary()
+
+
+lm(data = data, price ~ duration) %>% summary()
+lm(data = data, price ~ StartDate) %>% summary()
+
+mean(data$duration, trim = 0.05)/365*12/11
+sd(data$duration)
+mean(data$price)
+
+data %>%
+  ggplot(aes(x = duration, y = AwardPounds)) + 
+  geom_point() + 
+  geom_smooth()
+```
+
+# ANOVA
+```{r}
+library(nlme)
+library(car)
+lm(data = RO, price ~ LeadROName) %>%
+  Anova() 
+
+# actually statistically significant 
+library(broom)
+data <- RO %>%
+  filter(price < 10000)
+model <- aov(data = data, price ~ LeadROName) 
+model %>%
+  summary.lm() %>%
+  tidy() %>%
+  arrange(p.value) %>%
+  filter(p.value < 0.01)
+
+```
+
+```{r}
+data <- RO %>%
+  filter(price < 10000) 
+data %>%
+  group_by(LeadROName) %>%
+  summarise(price = mean(price)) %>%
+  arrange(-price)
+
+#checking 
+aov(data = data, price ~ LeadROName) %>%
+  summary.lm() %>%
+  tidy() %>%
+  arrange(p.value) %>%
+  filter(p.value < 0.1)
+
+aov(data = data, as.numeric(duration) ~ LeadROName) %>%
+  summary.lm() %>%
+  tidy() %>%
+  arrange(p.value) %>%
+  filter(p.value < 0.1)
+
+lme(fixed = price ~ factor(LeadROName), data = data)
+order(data)
+```
+
+```{r}
+mean(data$price)
+sd(data$price)
+data %>%
+  ggplot(aes(price)) + 
+  geom_density() + 
+  xlim(0, 550)
+
+#%>% length()
+
+
+#%>%length()
+t.test(t1, t2)
+
+data %>%
+  group_by(LeadROName) %>%
+  summarise(price = mean(price)) %>%
+  filter(price < 700) %>%
+  pull(price) -> t2
+t1.2 <- sample(t1, 83)
+t1.3 <- data %>%
+  group_by(LeadROName) %>%
+  summarise(price = median(price)) %>%
+  filter(price < 550) %>%
+  pull(price)
+
+library(boot)
+boot(t1)
+
+ggplot() + 
+  geom_density(aes(t1.3), col = "blue") + 
+  geom_density(aes(t2), col = "red") + 
+  geom_vline(xintercept = mean(t1.3), col = "blue", alpha = 0.2) + 
+  geom_vline(xintercept = mean(t2), col = "red", alpha = 0.2) + 
+  xlab("price")
+
+var.test(t1, t2)
+var.test(t1.2, t2) #randomly sampled
+var.test(t1.3, t2) #sample median only
+sd(t1.3)
+sd(t1.2)
+
+data <- RO %>%
+  filter(price < 550)
+```
+```{r}
+aov(data = data, price ~ LeadROName) %>%
+  summary.lm() %>%
+  tidy() %>%
+  filter(p.value < 0.05) %>%
+  arrange(-estimate)
+
+aov(data = data, price ~ LeadROName) %>%
+  summary.lm() %>%
+  tidy() %>%
+  filter(p.value < 0.1 & p.value >= 0.05) %>%
+  arrange(-estimate)
+```
+258.577, 125.8783, 631
+334.5311, 162.4008, 83
+
+```{r}
+
+```
+

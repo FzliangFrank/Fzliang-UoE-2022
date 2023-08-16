@@ -1,0 +1,49 @@
+---
+title: "R Notebook"
+output: html_notebook
+editor_options: 
+  chunk_output_type: inline
+---
+
+```{r message=FALSE, warning=FALSE}
+library(tidyverse)
+factor_scores <- read_csv("factor_scores.csv")
+SmartWatch_Data_File <- read_excel("SmartWatch Data File.xlsx")
+df<- factor_scores[,c(4,5)] %>%
+  cbind(SmartWatch_Data_File[,(8:12)])
+```
+
+```{r}
+with(df,
+     F1 %>%
+       density() %>%
+       plot(col = "grey", ylim = c(0,0.5))
+)
+
+with(df,
+     F2 %>%
+       density() %>%
+       lines(col = "skyblue")
+     )
+legend(0.3, 0.48, legend=c("F1", "F2"),
+       col=c("grey", "skyblue"), lty = 1:1, cex=0.8)
+```
+"AmznP"  "Female" "Degree" "Income" "Age"   
+```{r}
+with(df,
+     Income %>%
+       density() %>%
+       plot(col = "blue")
+     )
+```
+```{r}
+fit_1 <- glm(data = df, F1 ~ AmznP + Female + Degree , family = "binomial")
+fit_2 <- glm(data = df, F2 ~ AmznP + Female + Degree + Income + Age)
+summary(fit_2)
+
+```
+```{r}
+
+
+```
+

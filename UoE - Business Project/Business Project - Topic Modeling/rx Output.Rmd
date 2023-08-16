@@ -1,0 +1,32 @@
+---
+title: "Visualisation Gallery"
+author: "Frank Liang"
+date: "09/10/2021"
+output: html_document
+editor_options: 
+  chunk_output_type: inline
+---
+
+```{r}
+load("RData/enviroment.RData")
+load("RData/vis.RData")
+```
+
+```{r}
+overview_by_award.g
+overview_by_price.g
+```
+
+
+```{r echo=TRUE}
+choropleth.g
+```
+
+```{r warning=FALSE}
+flowmap.g
+```
+```{r}
+network.g
+```
+
+

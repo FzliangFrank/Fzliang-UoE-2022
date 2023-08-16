@@ -1,0 +1,124 @@
+---
+title: "Clustering Topics"
+author: "Frank Liang"
+date: "31/08/2021"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r}
+library(readr)
+library(tidyverse)
+library(tidytext)
+library(quanteda)
+library(tokenizers)
+text <- read.csv("raw/complete.csv")
+```
+
+```{r}
+text %>%
+  pull(abstractText) %>%
+  tokenize_word_stems() %>%
+  tokens(remove_punct = TRUE,
+  remove_symbols = TRUE,
+  remove_numbers = TRUE,
+  remove_url = TRUE,
+  remove_separators = TRUE,
+  split_hyphens = FALSE) %>%
+  tokens_select(pattern = stopwords("en"), selection = "remove") %>%
+  tokens_select(c("develop", "research", "project"), selection = "remove") %>% # remove a few high frequency words 
+  dfm() -> dfm
+  
+library(reshape2)
+tidy(dfm) %>%
+  group_by(document) %>%
+  summarise(n = length(document), sum = sum(count))
+```
+
+```{r}
+tidy(dfm) %>%
+  dcast(document ~ term) 
+```
+String Contains numers needs to be cleaned
+
+**remove string contains numbers**
+use regex. code is 
+`tokens_select(pattern = "\\w*[0-9]+\\w*\\s*", valuetype = "regex", selection = "remove")`
+```{r}
+dfs <- text %>%
+  pull(abstractText) %>%
+  tokenize_word_stems() %>%
+  tokens(remove_punct = TRUE,
+  remove_symbols = TRUE,
+  remove_numbers = TRUE,
+  remove_url = TRUE,
+  remove_separators = TRUE,
+  split_hyphens = FALSE) %>%
+  tokens_select(pattern = stopwords("en"), selection = "remove") %>%
+  tokens_select(c("develop", "research", "project"), selection = "remove") %>% 
+  tokens_select(pattern = "\\w*[0-9]+\\w*\\s*", valuetype = "regex", selection = "remove") %>%
+  dfm() %>%
+  tidy() %>%
+  dcast(document ~ term)
+dfs
+```
+
+```{r}
+dfs[is.na(dfs)] <- 0
+
+# transpose row and column
+df2 <- data.frame(t(dfs[-1]))
+colnames(df2) <- dfs[, 1]
+```
+
+```{r}
+disMtx <- dist(df2) #this take hell long
+hcl <- hclust(disMtx)
+
+plot(hcl)
+```
+
+```{r}
+df3 <- dfs[,-1]
+rownames(df3) <- dfs[, 1]
+dis <- dist(df3)
+hcl <- hclust(dis)
+```
+
+```{r}
+plot(hcl)
+```
+
+```{r}
+plot(hcl, hang = -1, cex = 0.2)
+```
+
+Find the right K value accroding this person: 
+```{r}
+library(factoextra)
+#install.packages("factoextra")
+library(NbClust)
+#install.packages("NbClust")
+
+fviz_nbclust(df3, kmeans, method = "silhouette") +
+  labs(subtitle = "Silhouette method")
+```
+
+# Map Goe Location Cluster
+```{r}
+library(leaflet)
+library(ggmap)
+install.packages("ggmap")
+```
+API Key: 
+AIzaSyAUIQA9pmYAzqRRSzS5FKer0KdC8zO0NIQ
+
+Don't loss it !!!!
+
+```{r}
+df %>%
+  select(LeadROName) %>%
+  mutate_geocode(LeadROName)
+```
+

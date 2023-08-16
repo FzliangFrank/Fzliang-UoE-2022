@@ -1,0 +1,17 @@
+---
+title: "Flow Map"
+author: "Frank Liang"
+date: "06/10/2021"
+output: html_document
+---
+
+Check Out this : https://flowmap.blue/1mK1ZMxNmGtSSxMhtoKO5h7nxyDMXFC_3_u4eo4rtucg/e3131e8?v=45.512084,-73.645460,11.07,0,0&a=0&as=1&b=1&bo=75&c=1&ca=1&d=1&fe=1&lt=1&lfm=ALL&col=Teal&f=45
+
+in R: https://www.paulamoraga.com/blog/2020/07/11/2020-07-11-mobility/
+
+```{r}
+devtools::install_github("FlowmapBlue/flowmapblue.R")
+library(flowmapblue)
+```
+
+

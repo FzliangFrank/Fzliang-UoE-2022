@@ -1,0 +1,294 @@
+---
+title: "Choropleths"
+author: "Frank Liang"
+date: "21/09/2021"
+output: html_document
+---
+
+```{r}
+library(readr)
+library(tidyverse)
+library(ggplot2)
+library(plotly)
+
+AIbyTopic <- read_csv("raw/AIbyTopic.csv")
+complete <- read_csv("raw/complete.csv")
+Geocode <- read_csv("raw/geocode.csv")
+cooked_csv <- read_csv("raw/cooked.csv")
+transfered <- read_csv("raw/transfered_projects.csv")
+transfered_id = pull(transfered)
+
+theme_set(theme(
+          panel.grid.major = element_blank(),
+          panel.grid.minor = element_blank(),
+          panel.border = element_blank(),
+          panel.background = element_rect(fill = "#f7f7f7"),
+          plot.background = element_rect(fill = "white")
+        ))
+
+#define a function to help you look up things in column
+lookUp <- function(df, col,term) {
+  df <- ungroup(df)
+  rgx = paste0("(?i)(",term,")")
+  filter(df, str_detect(pull(df, col), rgx))
+}
+#define function to look up research organisations
+RoLookUp <- function(str) {
+  lookUp(AIbyTopic,"LeadROName", str) %>%
+  pull(GTRProjectUrl) -> url
+  if (length(url) == 1) {
+    browseURL(url)
+  } else 
+    lookUp(AIbyTopic,"LeadROName", str) %>%
+    select(LeadROName, price, StartDate, EndDate, GTRProjectUrl) 
+}
+# find data from id | requires `cooked_csv`
+ref_data <- function(vector){
+    value = paste(rep("ProjectReference ==", each = length(vector)), shQuote(vector), collapse = " | ")
+    
+  cooked_csv %>%
+    filter(eval(parse(text = value)))
+  }
+# filter arguement 
+arg_f <- function(vector, col = "ProjectReference"){
+    paste(rep(paste(col, "=="), each = length(vector)), shQuote(vector), collapse = " | ")
+}
+# len functions
+Right <- function(x, n){
+  substr(x, nchar(x)-n+1, nchar(x))
+}
+Left <- function(x, n){
+  substr(x, 1, n)
+}
+
+```
+
+# data
+```{r}
+cooked_csv %>% 
+  group_by(LeadROName) %>%
+  filter(price < 10000) %>%
+  summarise(x = mean(price)) %>%
+  mutate(r = 50*((x - min(x))/(max(x) - min(x))) + 1) %>%
+  left_join(Geocode) -> data
+```
+
+# Self-Learning Daft...
+```{r}
+library(raster)
+library(leaflet)
+UK <- getData("GADM", country = "GB", level = 2)
+leaflet() %>%
+  setView(lat = 55.3781, lng = -3.4360, zoom = 5) %>%
+  addPolygons(data = UK, 
+              stroke = TRUE, smoothFactor = 0.2, fillOpacity = 1,
+              fillColor = 'steelblue', color = "black") 
+```
+
+```{r}
+library(rgeos)
+# find polygon of UK from online
+UK <- getData("GADM", country = "GB", level = 2)
+
+# transform coordinates into a sp formatted data
+crswgs84 <- CRS("+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs")
+data %>%
+  dplyr::select(longitude, latitude) %>% #long first lat second!
+  SpatialPoints(proj4string = crswgs84) -> data_sp
+
+# compute the amount of point with in area
+data_lef <- colSums(gContains(UK, data_sp, byid = TRUE))
+data_lef<- data.frame(id = names(data_lef), ipcount = as.numeric(data_lef))
+
+# pass this data into spacial polygons
+UK$count <- data_lef$ipcount
+
+mypal <- colorBin(palette = "YlOrRd", domain = sqrt(range(UK$count)), na.color = "transparent") 
+
+leaflet() %>% 
+  setView(lat = 55.3781, lng = -3.4360, zoom = 5) %>% 
+  addProviderTiles("Stamen.TonerLite") %>% 
+  addPolygons(data = UK, stroke = TRUE, fillColor = ~mypal(sqrt(count)),
+              fillOpacity = 0.7, col = "black", weight = 1,
+              highlightOptions = highlightOptions(color = "white", 
+                                                  weight = 2,
+                                                  bringToFront = TRUE)
+      )
+```
+`SpatialPoints` creat object of class spatial point class,  `proj4sring` is an argument that string of class `CRS-class`. `CRS` is a class of reference system 
+
+mtrx %*% matrix(data$x) 
+
+# Chorograph
+```{r}
+UK <- getData("GADM", country = "GB", level = 2)
+crswgs84 <- CRS("+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs")
+data %>%
+  dplyr::select(longitude, latitude, x) %>% #long first lat second!
+  SpatialPoints(proj4string = crswgs84) -> data_sp
+mtrx <- gContains(UK, data_sp, byid = TRUE)
+
+mtrx_r <- colSums(data$r%*%mtrx)/colSums(mtrx)
+mtrx_x <- colSums(data$x%*%mtrx)/colSums(mtrx)
+mate <- data.frame(id = names(mtrx_r), r = as.numeric(mtrx_r), x = as.numeric(mtrx_x))
+
+UK$c <- mate$r
+UK$data <- mate$x
+mypal <- colorNumeric(palette = "OrRd", domain = UK$data, na.color = "transparent")
+
+
+leaflet() %>% 
+  setView(lat = 55.3781, lng = -3.4360, zoom = 5) %>% 
+  addProviderTiles("Stamen.TonerLite") %>% 
+  addPolygons(data = UK, stroke = TRUE, fillColor = ~mypal(data),
+              fillOpacity = 0.7, col = "black", weight = 1,
+              highlightOptions = highlightOptions(color = "white", 
+                                                  weight = 2,
+                                                  bringToFront = TRUE),
+              label = paste(UK$NAME_2, round(UK$data))
+  ) %>%
+  addLegend("bottomright", pal = mypal, values = UK$data, labFormat = labelFormat(prefix = "£/d ")) 
+```
+
+# Make Spikes
+```{r}
+# refresh data
+Cooked %>% 
+  group_by(LeadROName) %>%
+  filter(price < 10000) %>%
+  summarise(x = mean(price)) %>%
+  mutate(r = 50*((x - min(x))/(max(x) - min(x))) + 1) %>%
+  left_join(Geocode) -> data
+# remove transferred projects 
+Cooked %>% 
+  group_by(LeadROName) %>%
+  filter(!eval(parse(text = arg_f(transfered_id)))) %>%
+  filter(price < 10000) %>%
+  summarise(x = mean(price)) %>%
+  mutate(r = 50*((x - min(x))/(max(x) - min(x))) + 1) %>%
+  left_join(Geocode) -> data
+
+#creat data
+rail <- c(1:length(data$x))
+plist = c()
+w = 0.06
+h = 0.1
+monitor <- NULL
+for (i in rail) {
+  la = as.numeric(data[i,5])
+  lg = as.numeric(data[i,6])
+   hi = sqrt(as.numeric(data[i,3]))
+   x_coord <- c(lg - w, lg, lg + w, lg - w)
+   y_coord <- c(la, la + h*hi, la, la)
+       xym <- cbind(x_coord, y_coord)
+       p = Polygon(xym)
+      ps = Polygons(list(p), ID = i)
+   plist = c(plist, ps)
+   
+   row = cbind(la, lg)
+   monitor = rbind(monitor, row)
+}
+spike <- sp::SpatialPolygons(plist)
+
+proj4string(spike) = CRS("+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs")
+
+plot(spike)
+spikes <- SpatialPolygonsDataFrame(spike, data)
+```
+
+
+# Finally Chorograph
+```{r}
+mypal <- colorNumeric(palette = "OrRd", domain = UK$data, na.color = "transparent")
+mypal_2 <- colorNumeric(palette = "OrRd", domain = sqrt(spikes$x), na.color = "transparent")
+leaflet() %>% 
+  setView(lat = 55.3781, lng = -3.4360, zoom = 5) %>% 
+  addProviderTiles(providers$CartoDB.Positron) %>% 
+  addPolygons(data = UK, stroke = TRUE, 
+              fillColor = ~mypal(data),
+              fillOpacity = 0.6, col = "black", weight = 0.4,
+              highlightOptions = highlightOptions(opacity = 1,
+                                                  weight = 1.5,
+                                                  bringToFront = FALSE),
+              label = paste(UK$NAME_2, round(UK$data))
+  ) %>%
+  addLegend("bottomright", pal = mypal, values = UK$data, labFormat = labelFormat(prefix = "£/d "), opacity = 1) %>%
+  addPolygons(data = spikes, col = "black", stroke = TRUE, fillColor = ~mypal_2(sqrt(x)), fillOpacity = 1, weight = 1, opacity = 0.75,
+              highlightOptions = highlightOptions(fillOpacity = 2,
+                                                  weight = 2,
+                                                  bringToFront = TRUE),
+              label = paste(spikes$LeadROName, "£/d", round(spikes$x))
+              ) 
+
+```
+
+```{r}
+plot(spike)
+plot(monitor)
+```
+    
+```{r}
+leaflet() %>%
+  setView(lat = 55.3781, lng = -3.4360, zoom = 5) %>% 
+  addProviderTiles(providers$CartoDB.Positron)
+```
+
+# Try polyline
+Try to creat polylines
+```{r}
+rail <- c(1:length(data$x))
+plist = c()
+monitor <- NULL
+for (i in rail) {
+  la = as.numeric(data[i,5])
+  lg = as.numeric(data[i,6])
+   hi = sqrt(as.numeric(data[i,3]))
+   x_coord <- c(lg - w, lg, lg + w)
+   y_coord <- c(la, la + hi*h, la)
+       xym <- cbind(x_coord, y_coord)
+       p = Line(xym)
+      ps = Lines(list(p), ID = i)
+   plist = c(plist, ps)
+   
+   row = cbind(la, lg)
+   monitor = rbind(monitor, row)
+}
+spike_line <- sp::SpatialLines(plist)
+
+proj4string(spike_line) = CRS("+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs")
+
+plot(spike_line)
+spike_lines <- SpatialLinesDataFrame(spike_line, data)
+```
+
+```{r}
+mypal <- colorNumeric(palette = "OrRd", domain = UK$data, na.color = "transparent")
+mypal_2 <- colorNumeric(palette = "OrRd", domain = sqrt(spikes$x), na.color = "transparent")
+leaflet() %>% 
+  setView(lat = 55.3781, lng = -3.4360, zoom = 5) %>% 
+  addProviderTiles(providers$CartoDB.Positron) %>% 
+  addPolygons(data = UK, stroke = TRUE, 
+              fillColor = ~mypal(data),
+              fillOpacity = 0.6, col = "black", weight = 0.4,
+              highlightOptions = highlightOptions(opacity = 1,
+                                                  weight = 1.5,
+                                                  bringToFront = FALSE),
+              label = paste(UK$NAME_2, round(UK$data))
+  ) %>%
+  addLegend("bottomright", pal = mypal, values = UK$data, labFormat = labelFormat(prefix = "£/d "), opacity = 1) %>%
+  addPolygons(data = spikes, col = "black", stroke = FALSE, fillColor = ~mypal_2(sqrt(x)), fillOpacity = 1, weight = 1, opacity = 0.75,
+              highlightOptions = highlightOptions(fillOpacity = 2,
+                                                  weight = 2,
+                                                  bringToFront = TRUE),
+              label = paste(spikes$LeadROName, "£/d", round(spikes$x))
+              ) %>%
+  addPolylines(data = spike_lines, col = "black", stroke = TRUE, fillColor = ~mypal_2(sqrt(x)), fillOpacity = 1, weight = 1, opacity = 0.75,
+              highlightOptions = highlightOptions(fillOpacity = 2,
+                                                  weight = 2,
+                                                  bringToFront = TRUE),
+              label = paste(spikes$LeadROName, "£/d", round(spikes$x))
+              )
+```
+
+
+ 

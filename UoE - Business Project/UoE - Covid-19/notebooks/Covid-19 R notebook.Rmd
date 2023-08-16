@@ -1,0 +1,196 @@
+---
+title: "Covid-19 - v1 - estimating infection"
+output: html_notebook
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Covid 19 
+Where does this data come from? [details about data](https://coronavirus.data.gov.uk/details/about-data)
+How to use API? 
+[developer's guide](https://coronavirus.data.gov.uk/details/developers-guide#params-filters)
+
+
+Obviously, the biggest flaw of this reserach is that data is very frauded. The value of this model is that it provides an alternative methodology to evaluate non-vaccine/lockdown measure effectiveness. Same model could be applied to ... when more effective estmate of real covid-19 cases is used. 
+
+## covid 19 API 
+install packages
+```{r}
+#remotes::install_github("publichealthengland/coronavirus-dashboard-api-R-sdk")
+library(ukcovid19)
+#install.packages("SEIRfansy")
+library("SEIRfansy")
+
+```
+Set structures and filter and store in df:
+```{r}
+query_filters <- c(
+  'areaType=nation',
+  'areaName=England'
+)
+cases_and_deaths = list(
+  date = "date",
+  cumCasesByPublishDate = "cumCasesByPublishDate",
+  cumCasesBySpecimenDate = "cumCasesBySpecimenDate",
+  cumDeaths28DaysByDeathDate = "cumDeaths28DaysByDeathDate"
+)
+df <- get_data(
+  filters = query_filters, 
+  structure = cases_and_deaths
+)
+View(df)
+```
+
+## set up 
+ploting:
+```{r}
+df$date <- as.POSIXct(df$date)
+#row.names(df) <- df$date
+
+with(df, 
+     plot(x = date, y = cumCasesByPublishDate, type = "l")
+     )
+with(df, 
+     plot(x = date, y = cumCasesBySpecimenDate, type = "l")
+     )
+lines(x = df$date, y = df$cumDeaths28DaysByDeathDate, col = "red")
+with(df,
+     plot(x = date, y = cumDeaths28DaysByDeathDate))
+
+class(df$date)
+mode(df$date)
+
+```
+## slice data:
+```{r}
+filter <- (df$date >= "2020-02-01")&(df$date <= "2020-07-1")
+block1 <- df[filter,]
+block1
+# pilar two cases werre included from 2nd of July
+with(block1, plot(x = date, y = cumCasesBySpecimenDate))
+
+f2 <- (df$date >= "2020-07-14")&(df$date <= "2020-11-15")
+block2 <- df[f2,]
+block2
+with(block2, plot(x = date, y = cumCasesBySpecimenDate))
+
+```
+### why slice data this way:
+Slicing of imformation. The first slice is from March 1st to July 1st. In July 1st, the lock down measure has not be relieved yet. This is not good for analysis... 
+
+Correct: differences between cum cases by publish date or speciman date. You won't have this problem if you switch the matrix to by speciman date. 
+
+Show the following graphy in report: 
+```{r}
+f0 <- (df$date >= "2020-04-01")&(df$date <= "2020-07-14")
+example <- df[f0,]
+with(example, plot(x = date, y = cumCasesByPublishDate))
+example[,c("date","cumCasesByPublishDate")]
+```
+As seen in above chart there is a gap on the 2nd July, this is because in 2nd of July pillar 2 test were included in England. Accroding to [Government Website](https://coronavirus.data.gov.uk/details/about-data#new-year-2021-schedule):
+
+Four nation:
+> UK data include results from both pillar 1 and pillar 2 testing. Up to 1 July, these data were collected separately meaning that people who had tested positive **via both methods were counted twice**. In combining the data for pillars 1 and 2 **on 2 July around 30,000 duplicates** were found and removed from the data. This is why the **number of cases reported reduced from 1 July to 2 July**. The technical issue affecting England reported cases on 3 and 4 October 2020 (see below) also affects the UK cases by date reported.
+
+in England:
+> Data include only pillar 1 cases until **2 July**, from when **pillar 2 cases are also included**.
+
+## modeling - Block 1:
+AIC gives indication if a logitic model is a fit. The smaller the better. 
+```{r}
+#install.packages("drc")
+library("drc")
+#model <- drm(cumCasesByPublishDate ~ date, fct = LL.3(), data = block1)
+
+model_l3 <- drm(cumCasesByPublishDate ~ date, fct = L.3(), data = block1)
+model_l4 <- drm(cumCasesByPublishDate ~ date, fct = L.4(), data = block1)
+model_ll3 <- drm(cumCasesByPublishDate ~ date, fct = LL.3(), data = block1)
+model_ll4 <- drm(cumCasesByPublishDate ~ date, fct = LL.4(), data = block1)
+model_W1 <- drm(cumCasesByPublishDate ~ date, fct = W1.4(), data = block1)
+model_W2 <- drm(cumCasesByPublishDate ~ date, fct = W2.4(), data = block1)
+
+
+with(block1, 
+     plot(x = date, y = cumCasesByPublishDate)
+     )
+#lines(x = block1$date, y = fitted(model), col = "blue")
+lines(x = block1$date, y = fitted(model_l4), col = "yellow")
+lines(x = block1$date, y = fitted(model_ll3), col = "orange")
+lines(x = block1$date, y = fitted(model_ll4), col = "green")
+lines(x = block1$date, y = fitted(model_W1), col = "blue")
+lines(x = block1$date, y = fitted(model_W2), col = "pink")
+
+#legend('bottom','groups',legend = c("logistic", "log-logistic (3 parameter)","log-logistic (4 parameter)", "type 1 Weibull", "type 2 Weibull"),ty = c(1,1), col = c("yellow", "blue", "green", "purple", "pink"))
+
+
+#colors()
+#par(new = TRUE)
+#with(block1, plot(x = date, y = model$fitted, col = "blue", type = "l"))
+```
+For coloring of the plot see [r documentation](https://www.rdocumentation.org/packages/graphics/versions/3.6.2/topics/par)
+
+A better fit for the model is log-based sygmoidal curves - weibull curves type 1.
+
+3 parameter or 4 parameter does not matter because in both model_l and model _ll, of which 3 parameter and 4 parameter eclipses with each other perfectly (you can not see red or blue on the graph). 
+
+It can be verify through both plotting that *Gompertz curve* is not suited for this curve. Real data is **above** logistic curve, the symmetric curve. This suggest model maybe a fit for the *alternative Gompertz Curve*. 
+
+```{r}
+library(MASS)
+#boxcox(block1$cumCasesByPublishDate ~ block1$date)
+#AIC(model)
+#-2*logLik(model) + 6
+
+models <- list(model_l4,model_ll3,model_ll4,model_W1,model_W2)
+models_str <- list("model_l4","model_ll3","model_ll4","model_W1","model_W2")
+aic <- unlist( lapply(models, AIC))
+list <- cbind(models_str, aic)
+list
+
+summary(model_W1)
+```
+Verify through *AIC method* also shows that `model_W1` has the lowest value 2454.686. Meaning that is this case model_W1 is the best fit.  
+
+
+# modeling - Block 2
+```{r}
+#model.2_l3 <- drm(cumCasesByPublishDate ~ date, fct = L.3(), data = block2)
+model.2_l4 <- drm(cumCasesByPublishDate ~ date, fct = L.4(), data = block2)
+model.2_ll3 <- drm(cumCasesByPublishDate ~ date, fct = LL.3(), data = block2)
+model.2_ll4 <- drm(cumCasesByPublishDate ~ date, fct = LL.4(), data = block2)
+model.2_W1 <- drm(cumCasesByPublishDate ~ date, fct = W1.4(), data = block2)
+model.2_W1.3 <- drm(cumCasesByPublishDate ~ date, fct = W1.3(), data = block2)
+model.2_W2 <- drm(cumCasesByPublishDate ~ date, fct = W2.4(), data = block2)
+model.2_W2.3 <- drm(cumCasesByPublishDate ~ date, fct = W2.3(), data = block2)
+
+with(block2, 
+     plot(x = date, y = cumCasesByPublishDate)
+     )
+#lines(x = block2$date, y = fitted(model), col = "blue")
+lines(x = block2$date, y = fitted(model.2_l4), col = "yellow")
+#lines(x = block2$date, y = fitted(model.2_ll3), col = "turquoise")
+lines(x = block2$date, y = fitted(model.2_ll4), col = "green")
+lines(x = block2$date, y = fitted(model.2_W1), col = "orange")
+#lines(x = block2$date, y = fitted(model.2_W1.3), col = "blue")
+lines(x = block2$date, y = fitted(model.2_W2), col = "blue")
+#lines(x = block2$date, y = fitted(model.2_W2.3), col = "pink")
+
+```
+```{R}
+model.2s <- list(model.2_l4, model.2_ll3, model.2_ll4, model.2_W1, model.2_W1.3, model.2_W2, model.2_W2.3)
+model.2s_str <- list("model_l4","model_ll3","model_ll4","model_W1", "model_W1.3", "model_W2", "model_W2.3")
+aic <- unlist( lapply(model.2s, AIC))
+list2 <- cbind(model.2s_str, aic)
+list2
+```
+So as per conclusion per Weibull 4 parameter model is the best fit as it contains lowest value...
+
+
+
+```{r}
+summary(model_W1)
+summary(model.2_W2)
+
+```

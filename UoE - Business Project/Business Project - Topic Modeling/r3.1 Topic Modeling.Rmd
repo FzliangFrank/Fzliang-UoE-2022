@@ -1,0 +1,76 @@
+---
+title: "Topic Modeling"
+author: "Frank Liang"
+date: "30/08/2021"
+output: html_document
+---
+
+```{r}
+library(readr)
+library(tidyverse)
+library(ggplot2)
+library(tokenizers)
+```
+
+```{r}
+df <- read_csv("raw/complete.csv")
+```
+
+# Build Corpus 
+## Version 1 LDA just use simplely the text process to Bu
+```{r}
+library(stm)
+df %>%
+  dplyr::select(abstractText, X1) %>%
+  pull(abstractText) %>%
+  textProcessor(metadata = df) -> cooked 
+```
+
+## From token to corpus
+```{r}
+library(quanteda)
+df %>%
+  dplyr::select(abstractText, X1) %>%
+  pull(abstractText) %>%
+  tokenize_word_stems() %>% #convert to tokens 
+  tokens(remove_punct = TRUE,
+  remove_symbols = TRUE,
+  remove_numbers = TRUE,
+  remove_url = TRUE,
+  remove_separators = TRUE,
+  split_hyphens = FALSE)-> tokens
+
+tokens %>%
+  tokens_select(pattern = stopwords("en"), selection = "remove") %>%
+  tokens_select(c("develop", "research", "project"), selection = "remove") %>% # remove a few high frequency words 
+  dfm() %>% # you can pass this to either `LDA()` or `stm()`
+  stm(K = 10, 
+      verbose = FALSE, 
+        init.type = "LDA") -> lda # alwyas store in a variable
+
+lda %>%
+  tidy(matrix = "beta") %>%
+  group_by(topic) %>%
+  top_n(10, beta) %>%
+  ungroup %>%
+  arrange(topic, -beta) %>%
+  mutate(term = reorder(term, beta)) %>%
+  ggplot(aes(x = beta, y = term, fill = factor(topic))) +
+  geom_col(show.legend = FALSE) + 
+  facet_wrap(~ topic, scales = "free")
+```
+
+```{r}
+tokens %>%
+  tokens_select(pattern = stopwords("en"), selection = "remove") %>%
+  tokens_select(c("develop", "research", "project"), selection = "remove") %>% # remove a few high frequency words 
+  dfm() 
+```
+
+```{r}
+topicCorr(second_stm) %>%
+  plot()
+```
+This is pretty good this means the topics are isolated. 
+
+

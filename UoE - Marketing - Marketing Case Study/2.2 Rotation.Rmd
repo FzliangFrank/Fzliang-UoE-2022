@@ -1,0 +1,68 @@
+---
+title: "Factor 2"
+author: "Frank Liang"
+date: "07/05/2021"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library("psych")
+library ("GPArotation")
+library("tidyverse")
+SmartWatch_Data_File <- read_excel("~/Dropbox/Projects/Marketing Case Study/SmartWatch Data File.xlsx")
+df <- SmartWatch_Data_File[, (1:7)]
+R <- cor(df)
+```
+
+```{r}
+x <- fa(df, nfactors=2, fm="pa", rotate ="promax") 
+fit1 <- x$scores %>%
+  as.data.frame()
+
+x <- fa(df, nfactors=2, fm="pa", rotate ="Varimax")
+fit2 <- x$scores %>%
+  as.data.frame()
+```
+
+```{r include=FALSE}
+lm(data = fit1, PA1 ~ PA2) %>%
+  plot()
+
+lm(data = fit2, PA1 ~ PA2) %>%
+  plot()
+```
+As predicted the first one is significant the second is not. 
+Use quantile plot to show that a vermax method is a better fit to the model?
+
+```{r}
+fa(df, nfactors=2, fm="pa", rotate ="promax") %>%
+  plot()
+
+fa(df, nfactors=2, fm="pa", rotate ="Varimax") %>%
+  plot()
+
+```
+
+```{r}
+lm(data = fit1, PA2 ~ PA1) 
+```
+```{r}
+library(ggplot2)
+
+ggplot(fit1, aes(PA1, PA2)) + 
+  geom_point() + 
+  theme_minimal() + 
+  stat_summary(fun.data=mean_cl_normal) + 
+  geom_smooth(method='lm', formula= y~x) +
+  coord_fixed()
+  
+  
+```
+
+

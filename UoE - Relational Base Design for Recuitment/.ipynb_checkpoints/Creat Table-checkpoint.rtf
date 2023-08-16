@@ -1,0 +1,68 @@
+{\rtf1\ansi\ansicpg1252\cocoartf2578
+\cocoatextscaling0\cocoaplatform0{\fonttbl\f0\fswiss\fcharset0 Helvetica;\f1\fnil\fcharset0 HelveticaNeue-Bold;}
+{\colortbl;\red255\green255\blue255;\red0\green0\blue0;}
+{\*\expandedcolortbl;;\cssrgb\c0\c0\c0;}
+\paperw11900\paperh16840\margl1440\margr1440\vieww10440\viewh9480\viewkind0
+\pard\tx566\tx1133\tx1700\tx2267\tx2834\tx3401\tx3968\tx4535\tx5102\tx5669\tx6236\tx6803\pardirnatural\partightenfactor0
+
+\f0\fs24 \cf0 CREATE TABLE EMPLOYEES (\
+	Employee_ID INTEGER AUTOINCREMENT,\
+	Role REFERENCES ROLES(Role_ID),\
+	Turnover_Intention INTEGER,\
+	Gender TEXT(1),\
+	Salary INTEGER\
+);\
+\
+\pard\tx566\tx1133\tx1700\tx2267\tx2834\tx3401\tx3968\tx4535\tx5102\tx5669\tx6236\tx6803\pardirnatural\partightenfactor0
+\cf0 CREATE TABLE ROLES(\
+	Role_ID INTEGER,\
+	Attrition INTEGER,\
+	Role_Name TEXT(30)\
+);\
+\
+CREATE TABLE TESTS(\
+	Role_ID REFERENCES ROLES(Role_ID),\
+	Test_Used INTEGER(30)\
+);\
+\
+\
+CREATE TABLE CANDIDATES(\
+	Applicant_ID INTEGER AUTOINCREMENT,\
+	Name TEXT(30),\
+	Role REFERENCES ROLES(Role_ID),\
+	Gender TEXT(1)\
+);\
+	\
+CREATE TABLE PSYCHOMETRIC(\
+	Applicant_ID REFERENCES CANDIDATES(Applicant_ID),\
+	Openness INTEGER,\
+	Neuroticism INTEGER,\
+	
+\f1\b\fs20 \cf2 Conscientiousness
+\f0\b0\fs24 \cf0  INTEGER,\
+	Agreeableness INTEGER,\
+	Extraversion INTEGER\
+);\
+\
+CREATE TABLE NUMERICAL_RATIONING(\
+	Applicant_ID REFERENCES CANDIDATES(Applicant_ID),\
+	Score INTEGER\
+);\
+\
+CREATE TABLE INTERVIEW(\
+	Applicant_ID REFERENCES CANDIDATES(Applicant_ID),\
+	Review TEXT(3000)\
+);\
+\
+CREATE TABLE COMPOSITE TEST(\
+	Applicant_ID REFERENCES CANDIDATES(Applicant_ID),\
+	Recommend_Role TEXT(60)\
+);\
+\
+\
+\
+\
+\
+\
+CREATE TABLE ()\
+}

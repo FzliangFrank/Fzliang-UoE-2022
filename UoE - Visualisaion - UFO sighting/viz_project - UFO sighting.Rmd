@@ -1,0 +1,179 @@
+---
+title: "UFO Sightings"
+output: html_notebook
+editor_options: 
+  chunk_output_type: console
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Cmd+Shift+Enter*. 
+
+```{r}
+R.version.string
+```
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Cmd+Option+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Cmd+Shift+K* to preview the HTML file). 
+
+The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.
+
+# UFO sightings 
+
+Data includes both logitude location and times. So can do both time series or spatial viz. 
+Source:  https://www.kaggle.com/NUFORC/ufo-sightings
+
+The complete data includes entries where the location of the sighting was not found or blank (0.8146%) or have an erroneous or blank time (8.0237%). Since the reports date back to the 20th century, some older data might be obscured. Data contains city, state, time, description, and duration of each sighting.
+
+## inspirations
+Dashboard:
+Look for dashboard design: ttps://www.kaggle.com/hbrenborbs/the-ufo-s-are-still-out-there
+
+Customer Marker: https://rstudio.github.io/leaflet/markers.html
+
+
+# Lets Get Started!
+
+```{r message=FALSE, warning=FALSE}
+library(tidyverse)
+df_com <- read_csv('./complete.csv')
+df_scr <- read_csv('./scrubbed.csv')
+
+# Geo Library
+library(leaflet)
+library(rgdal)
+library(leaflet.providers)
+library(htmltools)
+
+# Time Series
+library(lubridate) 
+```
+# Data Integration
+```{r}
+
+df <- df_scr[,c("comments","datetime","latitude","longitude","duration (seconds)")]
+df_2 <- df_com[,c("comments","datetime","latitude","longitude","duration (seconds)")]
+df$time <- mdy_hm(df$datetime)
+df_2$time <- mdy_hm(df_2$datetime)
+
+df_f <- df_2 %>% 
+  drop_na("duration (seconds)") %>%
+  drop_na("time") %>%
+  transform(`duration (seconds)` = as.numeric(`duration (seconds)`)) 
+  
+
+with(df_f, plot(x = time, y = duration..seconds., type = "h"))
+
+df_2 %>% 
+  drop_na("duration (seconds)") %>%
+  pull("duration (seconds)") %>% 
+  as.numeric() %>%
+  density() %>%
+  plot(xlim = c(0, 300000))
+#y <- c(1960, 1980)
+#t <- as.POSIXct(y)
+
+#with (df_f, plot(x= time, y = duration..seconds. ,
+#                 type = "h",
+#                 xlim = t
+#                 ))
+
+#sapply(df_f, class)
+```
+
+Show object class
+```{r}
+df_2 %>%
+  sapply(mode)
+df_f %>%
+  sapply(mode)
+names(df_f)
+```
+```
+# Convert Time to POSIX Experiement
+ex <- gross$datetime 
+ex[4321]
+sample(ex,4)
+
+ax <- mdy_hm(ex)
+print(str(ex[5555]), str(ax[5555]))
+```
+
+Btw there are people who were doing the same
+
+## Make UFO icon
+```{r}
+ufo_icon = makeIcon(iconUrl = "./asset/ufo.png",
+                    iconWidth = 25, iconHeight = 25)
+pri_icon = makeIcon(iconUrl = "./asset/pyramid.png",
+                    iconWidth = 40, iconHeight = 40)
+
+```
+
+# Main Black and Whtie Stlye
+```{r echo=FALSE}
+uk_lon <- 0
+uk_lat <- 55.3781
+class(df$time[1])
+
+filter <- (year(df$time) == "1996" )
+select <- df[filter, c("latitude","longitude","comments","time","duration (seconds)")]
+
+leaflet(select) %>%
+  setView(lng = uk_lon, lat = uk_lat, zoom = 5) %>% 
+  addProviderTiles(providers$CartoDB.Positron) %>%
+  addMarkers(~longitude, ~latitude,
+    icon = ufo_icon,  
+    clusterOptions = markerClusterOptions(  
+      iconCreateFunction = JS("  
+                                          function(cluster) {  
+                                             return new L.DivIcon({  
+                                               html: '<div style=\"background-color:rgba(77,77,77,0.5)\"><span>' + cluster.getChildCount() + '</div><span>',  
+                                               className: 'marker-cluster'  
+                                             });  
+                                           }")  
+    ),  
+    label = ~time,
+    popup = ~comments,
+      )  %>%
+  addMiniMap()
+  
+```
+to add lebal you need to use `library(htmltools)`. label function allows you to add a lebal from 
+
+Cordinate and associate altitude...
+
+
+### Customise Cluster Numbers
+#```{r}
+leaflet(recent) %>%
+  setView(lng = uk_lon, lat = uk_lat, zoom = 5) %>% 
+  addProviderTiles(providers$CartoDB.Positron) %>%
+  addMarkers(~longitude, ~latitude, icon = ufo_icon,
+    clusterOptions = markerClusterOptions(
+      iconCreateFunction = JS("
+        function(cluster) {
+          var childCount = cluster.getChildCount(); 
+          var x
+          var c = ' marker-cluster-';  
+          if (childCount < 10) {  
+          c += 'small';
+          } else if (childCount < 50) {  
+          c += 'medium';
+          } else { 
+          c += 'large';
+          }
+    return new L.DivIcon({ html: '<div style=\"background-color:rgba(167, 214, 10, 0.83)\"><span>' + childCount + '</span></div>', className: 'marker-cluster' + c, iconSize: new L.Point(40, 40) });
+
+        }
+      ")
+    ),
+  label = ~comments
+      )
+```
+
+
+
+
+

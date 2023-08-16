@@ -1,0 +1,104 @@
+---
+title: "Boot Strapping"
+author: "Frank Liang"
+date: "07/10/2021"
+output: html_document
+---
+```{r}
+# Bootstrap 95% CI for R-Squared
+library(boot)
+# function to obtain R-Squared from the data 
+rsq <- function(formula, data, indices) {
+  d <- data[indices,] # allows boot to select sample 
+  fit <- lm(formula, data=d)
+  return(summary(fit)$r.square)
+} 
+# bootstrapping with 1000 replications 
+results <- boot(data=mtcars, statistic=rsq, 
+   R=1000, formula=mpg~wt+disp)
+
+# view results
+results
+plot(results)
+
+# get 95% confidence interval 
+boot.ci(results, type="bca")
+```
+
+```{r}
+names(results)
+```
+
+```{r}
+results$t # t seems to be bootstriped values boot to 1000
+results$t
+names(mtcars)
+```
+
+```{r}
+bs <- function(formula, data, indices) {
+  d <- data[indices,] # allows boot to select sample 
+  fit <- lm(formula, data=d)
+  return(coef(fit)) }
+
+results <- boot(data=mtcars, statistic=bs, 
+   R=1000, formula=mpg~wt+disp)
+boot.ci(results, type="bca", index=1) # intercept 
+boot.ci(results, type="bca", index=2) # wt 
+boot.ci(results, type="bca", index=3) # disp
+
+str(results)
+```
+
+```{r}
+x1 <- rnorm(540)
+boot.identity = function(x,i){x[i]}
+boot.mean = function(x,i){boot.mean = mean(x[i])}
+z1 = boot(x1, boot.mean, R=999)
+z1
+
+
+plot(density(x1))
+lines(density(z1$t), col = "red")
+
+z2 = boot(x1, boot.identity, R=999)
+
+plot(density(x2))
+lines(density(z2$t), col = "blue")
+data.frame(z2$t) %>% length()
+data.frame(z2$t) %>% names()
+data.frame(z2$t)$X1 %>% length()
+
+data.frame(z2$t)$X6 -> x
+plot(density(x1))
+lines(density(x), col = "blue")
+```
+
+```{r}
+ind <- list(c(1, 2, 2), c("A", "A", "B"))
+table(ind)
+tapply(1:3, ind) #-> the split vector
+tapply(1:3, ind, sum)
+```
+
+```{r}
+A <- rnorm(10)
+B <- rnorm(10)
+C <- rnorm(10)
+
+name <- c(replicate(10, "A"), replicate(10, "B"), replicate(10, "C"))
+value <- c(A, B, C)
+data.frame(name, value) -> data
+
+statfun = function(d, i) {lda(formula= name ~ value, data=d[i, ])}
+boot(data, statfun, R=100, strata=factor(data$name))
+
+lm(data = data, value ~ name) %>%
+  summary()
+
+kruskal.test(value ~ name, data)
+lm(value ~ name, data) %>% anova()
+
+```
+
+

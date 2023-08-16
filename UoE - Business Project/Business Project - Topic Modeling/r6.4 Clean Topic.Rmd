@@ -1,0 +1,255 @@
+---
+title: "Topic Modeling From Cleaned Data"
+author: "Frank Liang"
+date: "11/10/2021"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r}
+load("RData/enviroment.RData")
+arg_f -> arf
+library(tidyverse)
+
+viz_thoughts <- function(i, n = 5, nudge = 1*10^4) {
+  i = i
+  findThoughts(stm_20, topic = c(i), texts =  deep_cleaned$ProjectReference, n = n)[[c(2,1)]] %>%
+  viz_id(text_label = T, nudge = nudge)
+}
+
+find_thoughts <- function(i, n = 5) {
+  findThoughts(stm_20, topic = c(i), texts =  deep_cleaned$ProjectReference, n = n)[[c(2,1)]]
+}
+
+stm_thoughts <- function(i){
+    findThoughts(stm_20, topic = c(i), texts =  deep_cleaned$Title, n = 3)[[c(2,1)]] %>%
+    toString()
+}
+
+```
+
+```{r}
+AIbyTopic %>%
+  filter(!eval(parse(text = arg_f(transfered_id)))) %>%
+  filter(!eval(parse(text = arg_f(paralleled_id)))) %>%
+  left_join(abstractText, by = c("ProjectId" = "id")) -> cleaned
+
+# there are duplicated abstract text but title are the same
+cleaned %>%
+  group_by(abstractText) %>%
+  mutate(n = length(abstractText)) %>%
+  filter(n != 1) %>%
+  pull(ProjectReference) -> parallel_plus
+
+# further cleaning
+cleaned %>%
+  filter(!eval(parse(text = arg_f(parallel_plus)))) -> deep_cleaned
+```
+We thought data was cleaned but it was not.... 
+
+
+
+```{r}
+library(quanteda)
+library(stm)
+deep_cleaned %>%
+  dplyr::select(abstractText, X1) %>%
+  pull(abstractText) %>%
+  textProcessor(metadata = deep_cleaned, 
+                lowercase = TRUE,
+  removestopwords = TRUE,
+  removenumbers = TRUE,
+  removepunctuation = TRUE,
+  customstopwords = c("develop", "research", "project", "will")
+    ) -> cooked
+
+out <- with(cooked, prepDocuments(documents, vocab, meta)) #`document`s is a value output from textProcessor
+
+attach(out)
+
+stm(documents = documents, vocab = vocab, K = 20, data = meta, init.type = "Spectral", verbose = FALSE) -> stm_20
+
+save(stm_20, out, file = "RData/stm_20.RData")
+```
+
+```{r}
+library(tidytext)
+stm_20 %>%
+  tidy(matrix = "beta") %>%
+  group_by(topic) %>%
+  top_n(10, beta) %>%
+  ungroup %>%
+  arrange(topic, -beta) %>%
+  mutate(term = reorder(term, beta)) %>%
+  ggplot(aes(x = beta, y = term, fill = factor(topic))) +
+  geom_col(show.legend = FALSE) + 
+  facet_wrap(~ topic, scales = "free")
+
+toLDAvis(stm_20, documents, R = 10, reorder.topics = FALSE)
+```
+
+```{r}
+deep_cleaned <- deep_cleaned
+#plot(stm_20)
+i = 4
+findThoughts(stm_20, topic = c(i), texts =  deep_cleaned$Title, n = 5)
+findThoughts(stm_20, topic = c(i), texts =  deep_cleaned$ProjectReference, n = 5)[[c(2,1)]] %>%
+  viz_id(text_label = T, nudge = 1*10^4)
+  
+#topicCorr(stm_20) %>% plot() 1 & 6 3 & 10
+```
+
+# Meta Data Analysis 
+Incorporating topic uncertainty no topic actually have effect 
+
+```{r}
+estimateEffect(
+  formula = 1:20 ~ AwardPounds, 
+  stmobj = stm_20, 
+  metadata = meta, 
+  uncertainty = "Global") %>%
+  tidy() %>%
+  filter(p.value < 0.05) %>%
+  filter(term != "(Intercept)")
+
+estimateEffect(
+  formula = 1:20 ~ AwardPounds, 
+  stmobj = stm_20, 
+  metadata = meta, 
+  uncertainty = "Local", 
+  document = documents) %>%
+  tidy() %>%
+  filter(p.value < 0.05) %>%
+  filter(term != "(Intercept)")
+```
+6 AwardPounds 0.0000000144 0.00000000372      3.89 0.000112
+6 AwardPounds 0.0000000143 0.00000000265      5.40 0.0000000990
+
+
+```{r}
+#time and topic
+meta %>%
+  mutate(StartDate = as.Date(StartDate, format = "%d/%m/%Y")) %>%
+  mutate(EndDate = as.Date(EndDate, format = "%d/%m/%Y")) %>%
+  mutate(date = StartDate - min(StartDate)) %>%
+  mutate(date = as.numeric(date)) %>%
+  mutate(duration = EndDate - StartDate) %>%
+  mutate(price = AwardPounds/as.numeric(duration)) -> meta_2
+
+estimateEffect(
+  formula = 1:20 ~ date, 
+  stmobj = stm_20, 
+  metadata = meta_2, 
+  uncertainty = "Global") %>%
+  tidy() %>%
+  filter(p.value < 0.01) %>%
+  filter(term != "(Intercept)") %>%
+  arrange(-estimate) %>% View()
+```
+> topic term     estimate  std.error statistic  p.value
+  <int> <chr>       <dbl>      <dbl>     <dbl>    <dbl>
+1     1 date   0.00000969 0.00000362      2.67 0.00770 AI in decision making
+2     2 date  -0.0000161  0.00000475     -3.40 0.000728 Data Analytics
+3     6 date   0.0000178  0.00000522      3.40 0.000711 Industrial Collaboration Centre
+4     8 date   0.0000126  0.00000438      2.87 0.00423 Digital Twins/Urban Analytics
+5    11 date  -0.0000170  0.00000479     -3.56 0.000405 Evolutionary Computation
+6    20 date  -0.00000948 0.00000365     -2.59 0.00972 Ontology
+
+```{r}
+estimateEffect(
+  formula = 1:20 ~ price, 
+  stmobj = stm_20, 
+  metadata = meta_2, 
+  uncertainty = "Global") %>%
+  tidy() %>%
+  filter(p.value < 0.01) %>%
+  filter(term != "(Intercept)") %>%
+  arrange(-estimate)
+```
+
+```{r}
+estimateEffect(
+  formula = 1:20 ~ sqrt(price), 
+  stmobj = stm_20, 
+  metadata = meta_2, 
+  uncertainty = "Global") %>%
+  tidy() %>%
+  filter(p.value < 0.01) %>%
+  filter(term != "(Intercept)") %>%
+  arrange(-estimate)
+```
+
+
+```{r}
+estimateEffect(
+  formula = 1:20 ~ duration, 
+  stmobj = stm_20, 
+  metadata = meta_2, 
+  uncertainty = "Global") %>%
+  tidy() %>%
+  filter(p.value < 0.01) %>%
+  filter(term != "(Intercept)")
+```
+> 1     6 duration  0.0000575 0.0000176      3.26 0.00118  
+  2     7 duration -0.0000666 0.0000163     -4.08 0.0000504 AI for recreation
+
+```{r}
+estimateEffect(
+  formula = 1:20 ~ as.factor(LeadROName), 
+  stmobj = stm_20, 
+  metadata = meta_2, 
+  uncertainty = "Global") %>%
+  tidy() %>%
+  filter(p.value < 0.01) %>%
+  mutate(term = str_replace(term, "LeadROName", ""))
+```
+> # A tibble: 6 x 6
+topic term                     estimate std.error statistic  p.value
+  <int> <chr>                       <dbl>     <dbl>     <dbl>    <dbl>
+1     2 University of Lincoln       0.428     0.157      2.72  6.69e-3 Data Analytic 
+2    11 University of Kent          0.360     0.132      2.73  6.56e-3 Evolutionary Computing
+3    13 Bangor University           0.844     0.215      3.93  9.72e-5 Robotic and Automation
+4    14 University of Abertay D…    0.802     0.290      2.77  5.89e-3 Health
+5    17 Diamond Light Source        0.847     0.250      3.39  7.45e-4 Neuronetwork
+6    18 Bournemouth University      0.761     0.229      3.33  9.40e-4 Urban Analytic
+
+
+```{r}
+estimateEffect(
+  formula = 1:20 ~ LeadROName, 
+  stmobj = stm_20, 
+  metadata = meta_2, 
+  uncertainty = "Local", 
+  document = documents) %>%
+  tidy() %>%
+  filter(p.value < 0.01) %>%
+  mutate(term = str_replace(term, "LeadROName", "")) %>%
+  filter(term != "(Intercept)") -> topic_org
+write_csv(topic_org, "raw/topic and RO.csv")
+```
+
+# Explore What Topics
+```{r}
+toLDAvis(stm_20, documents, R = 10, reorder.topics = FALSE)
+
+stm_20 %>%
+  tidy(matrix = "beta") %>%
+  group_by(topic) %>%
+  top_n(10, beta) %>%
+  ungroup %>%
+  arrange(topic, -beta) %>%
+  mutate(term = reorder(term, beta)) %>%
+  group_by(topic) %>%
+  dplyr::summarise(terms = toString(term)) %>%
+  mutate(example = find_title(topic)) -> topicTable
+
+write_csv(topicTable, "raw/topicTable.csv")
+for(i in c(1:20)){
+  find_thoughts(i)
+  
+}
+i = 1
+Vectorize(stm_thoughts) -> find_title
+```
+

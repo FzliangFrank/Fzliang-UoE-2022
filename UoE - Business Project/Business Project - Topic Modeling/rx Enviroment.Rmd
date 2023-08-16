@@ -1,0 +1,187 @@
+---
+title: "All Functions Libraries and Objects"
+author: "Frank Liang"
+date: "09/10/2021"
+output: html_document
+---
+
+```{r}
+setwd("~/Dropbox/Projects/Business Project - Topic Modeling")
+library(readr)
+library(tidyverse)
+library(ggplot2)
+library(tokenizers)
+library(plotly)
+library(tidytext)
+library(htmlwidgets)
+theme_set(theme(
+  panel.grid.major = element_blank(),
+  panel.grid.minor = element_blank(),
+  panel.border = element_blank(),
+  panel.background = element_rect(fill = "#f7f7f7"),
+  plot.background = element_rect(fill = "white")
+))
+```
+
+```{r}
+complete <- read_csv("raw/complete.csv")
+AIbyTopic <- read_csv("raw/AIbyTopic.csv")
+cooked_csv <- read_csv("raw/cooked.csv")
+abstractText <- read_csv("raw/abstractText.csv")
+geocode <- read_csv("raw/geocode.csv")
+
+singled <- read_csv("raw/cleaned_unique.csv")
+transfered <- read_csv("raw/transfered_projects.csv")
+paralleled <- read_csv("raw/paralleled_projects.csv")
+
+transfered_id <- transfered$value
+paralleled_id <- paralleled %>% pull(ProjectReference)
+```
+
+```{r}
+# base function lookup a value
+lookup <- function(df, col,term) {
+  df <- ungroup(df)
+  rgx = paste0("(?i)(",term,")")
+  filter(df, str_detect(pull(df, col), rgx))
+}
+
+# right and left function 
+Right <- function(x, n){
+  substr(x, nchar(x)-n+1, nchar(x))
+}
+Left <- function(x, n){
+  substr(x, 1, n)
+}
+
+# find data from id | requires `cooked_csv`
+ref_data <- function(vector){
+  value = paste(rep("ProjectReference ==", each = length(vector)), shQuote(vector), collapse = " | ")
+  
+  cooked_csv %>%
+    filter(eval(parse(text = value)))
+}
+# filter arguement 
+arg_f <- function(vector, col = "ProjectReference"){
+  paste(rep(paste(col, "=="), each = length(vector)), shQuote(vector), collapse = " | ")
+}
+
+# visualize by a vector of given id
+viz_id <- function(projectReference, text_label = FALSE, nudge = 100){
+  value = paste(rep("ProjectReference ==", each = length(projectReference)), shQuote(projectReference), collapse = " | ")
+  cooked_csv %>%
+    filter(eval(parse(text = value))) -> df
+  if(text_label == TRUE) {
+    #visualization part
+    df %>%
+      ggplot(aes(y = AwardPounds, label = LeadROName, label1= Title)) + 
+      geom_linerange(aes(xmin = StartDate, xmax = EndDate, y = AwardPounds), color = "#363636") +
+      geom_point(aes(x = StartDate), color = "#363636") + 
+      geom_point(aes(x = EndDate), color = "coral") + 
+      labs(title = paste("Explore topics")) + 
+      geom_text(aes(x = StartDate + duration/2, y = AwardPounds, label = paste(LeadROName , Title)), nudge_y = nudge, size = 2.5) -> g
+    
+    ggplotly(g) %>%
+      style(traces = 2, text = paste(df$StartDate,"\n",df$duration, "days")) %>%
+      style(traces = 1, text = paste(round(df$price),"\n", df$PIFirstName, df$PISurname,"\n",df$duration, "days")) %>%
+      style(traces = 3, customdata = df$GTRProjectUrl, text = paste(df$EndDate,"\n", df$LeadROName, "\n",df$Title)) %>%
+      onRender("
+      function(el) { 
+        el.on('plotly_click', function(d) { 
+          var url = d.points[0].customdata;
+          window.open(url);
+        });
+      }
+    ") # set up click event that open URL 
+  } else { df %>%
+      ggplot(aes(y = AwardPounds, label = LeadROName, label1= Title)) + 
+      geom_linerange(aes(xmin = StartDate, xmax = EndDate, y = AwardPounds), color = "#363636") +
+      geom_point(aes(x = StartDate), color = "#363636") + 
+      geom_point(aes(x = EndDate), color = "coral") + 
+      labs(title = paste("Explore topics")) -> g
+    
+    ggplotly(g) %>%
+      style(traces = 2, text = paste(df$StartDate,"\n",df$duration, "days")) %>%
+      style(traces = 1, text = paste(round(df$price),"\n", df$PIFirstName, df$PISurname,"\n",df$duration, "days")) %>%
+      style(traces = 3, customdata = df$GTRProjectUrl, text = paste(df$EndDate,"\n", df$LeadROName, "\n",df$Title)) %>%
+      onRender("
+        function(el) { 
+          el.on('plotly_click', function(d) { 
+            var url = d.points[0].customdata;
+            window.open(url);
+          });
+        }
+      ") # set up click event that open URL
+  }
+}
+# visualize a project from `cooked_csv`
+view_prj <- function(row, term){
+  lookup(cooked_csv, row, term) -> df
+  df %>%
+    ggplot(aes(y = AwardPounds, label = LeadROName, label1= Title)) + 
+    geom_linerange(aes(xmin = StartDate, xmax = EndDate, y = AwardPounds), color = "#363636") +
+    geom_point(aes(x = StartDate), color = "#363636") + 
+    geom_point(aes(x = EndDate), color = "coral") + 
+    labs(title = paste("Explore topics")) + 
+    geom_text(aes(x = StartDate + duration/2, y = AwardPounds, label = Title), nudge_y = 50, size = 2.5) -> g
+  
+  ggplotly(g) %>%
+    style(traces = 2, text = paste(df$StartDate,"\n",df$duration, "days")) %>%
+    style(traces = 1, text = paste(round(df$price),"\n", df$PIFirstName, df$PISurname,"\n",df$duration, "days")) %>%
+    style(traces = 3, customdata = df$GTRProjectUrl, text = paste(df$EndDate,"\n", df$LeadROName, "\n",df$Title)) %>%
+    onRender("
+    function(el) { 
+      el.on('plotly_click', function(d) { 
+        var url = d.points[0].customdata;
+        window.open(url);
+      });
+    }
+  ") # set up click event that open URL
+}
+```
+
+# Topic Modeling
+```{r}
+load("RData/stm_20.RData")
+
+AIbyTopic %>%
+  filter(!eval(parse(text = arg_f(transfered_id)))) %>%
+  filter(!eval(parse(text = arg_f(paralleled_id)))) %>%
+  left_join(abstractText, by = c("ProjectId" = "id")) -> cleaned
+
+# there are duplicated abstract text but title are the same
+cleaned %>%
+  group_by(abstractText) %>%
+  mutate(n = length(abstractText)) %>%
+  filter(n != 1) %>%
+  pull(ProjectReference) -> parallel_plus
+
+# further cleaning
+cleaned %>%
+  filter(!eval(parse(text = arg_f(parallel_plus)))) -> deep_cleaned
+```
+
+```{r}
+viz_thoughts <- function(i, n = 5, nudge = 1*10^4) {
+  i = i
+  findThoughts(stm_20, topic = c(i), texts =  deep_cleaned$ProjectReference, n = n)[[c(2,1)]] %>%
+  viz_id(text_label = T, nudge = nudge)
+}
+
+find_thoughts <- function(i, n = 5) {
+  findThoughts(stm_20, topic = c(i), texts =  deep_cleaned$ProjectReference, n = n)[[c(2,1)]]
+}
+
+stm_thoughts <- function(i){
+    findThoughts(stm_20, topic = c(i), texts =  deep_cleaned$Title, n = 3)[[c(2,1)]] %>%
+    toString()
+}
+
+```
+
+```{r}
+save.image (file = "RData/enviroment.RData")
+```
+
+
+

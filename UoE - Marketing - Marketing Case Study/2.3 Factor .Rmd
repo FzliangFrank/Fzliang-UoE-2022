@@ -1,0 +1,80 @@
+---
+title: "2.3 Factor"
+author: "Frank Liang"
+date: "10/05/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library("psych")
+library ("GPArotation")
+library("tidyverse")
+SmartWatch_Data_File <- read_excel("~/Dropbox/Projects/Marketing Case Study/SmartWatch Data File.xlsx")
+df <- SmartWatch_Data_File[, (1:7)]
+R <- cor(df)
+```
+
+```{r}
+library(MASS)
+
+X <- cor(df) 
+iX <- ginv(X) 
+S2 <- diag(diag((iX^-1)))
+AIS <- S2%*%iX%*%S2                      # anti-image covariance matrix
+IS <- X+AIS-2*S2                         # image covariance matrix
+Dai <- sqrt(diag(diag(AIS)))             # The diagonals of the anti-image correlation matrix diagonals should be &gt; 0.5
+IR <- ginv(Dai)%*%IS%*%ginv(Dai)         # image correlation matrix
+AIR <- ginv(Dai)%*%AIS%*%ginv(Dai)       # anti-image correlation matrix
+print(diag(AIR), row.names = FALSE)
+
+VSS.scree(R, main = "scree plot")
+```
+
+```{r}
+KMO(R)
+```
+
+Full loading includes DeviSt
+```{r}
+R <- cor(df)
+fa(R, nfactors = 2, fm="pa", rotate="Promax") %>% print(sort = TRUE)
+```
+
+Loading exclude DeviSt
+```{r}
+R <- cor(df[,-4])
+fa(R, nfactors = 2, fm="pa", rotate="Promax") %>% print(sort = TRUE)
+```
+
+```{r}
+m <- fa(df, nfactors = 2, fm="pa", rotate="Promax")
+fs<- m$scores %>%
+  as.data.frame() 
+
+fs <- fs %>%
+  mutate(PA1 = PA1 - min(PA1) + 1) %>%
+  mutate(PA2 = PA2 - min(PA1) + 1)
+```
+
+```{r}
+install.packages('RColorBrewer')
+library("RColorBrewer")
+cl <- brewer.pal(7,"PRGn")
+```
+
+```{r}
+with(fs, PA1 %>% density()
+     %>% plot(col = "grey", xlim = c(1,7)))
+
+for(i in (1:7)) {
+   df %>%
+ pull(i) %>%
+ density() %>%
+  lines(col = cl[i])
+}
+```
+

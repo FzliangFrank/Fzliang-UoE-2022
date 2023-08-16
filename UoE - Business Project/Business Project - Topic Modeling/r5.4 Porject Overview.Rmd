@@ -1,0 +1,55 @@
+---
+title: "Visualisation Project Overview"
+author: "Frank Liang"
+date: "27/09/2021"
+output: html_document
+---
+```{r}
+library(readr)
+library(tidyverse)
+library(ggplot2)
+library(plotly)
+
+AIbyTopic <- read_csv("raw/AIbyTopic.csv")
+complete <- read_csv("raw/complete.csv")
+
+theme_set(theme(
+          panel.grid.major = element_blank(),
+          panel.grid.minor = element_blank(),
+          panel.border = element_blank(),
+          panel.background = element_rect(fill = "#f7f7f7"),
+          plot.background = element_rect(fill = "white")
+        ))
+```
+
+# Customise plotly visualisation with `style`
+use `plotly_json(p)` to inspect what trace is what
+
+```{r}
+library(htmlwidgets)
+AIbyTopic %>%
+  mutate(StartDate = as.Date(StartDate, format = "%d/%m/%Y")) %>%
+  mutate(EndDate = as.Date(EndDate, format = "%d/%m/%Y")) %>%
+  mutate(duration = EndDate - StartDate) %>%
+  mutate(price = AwardPounds/as.numeric(duration)) -> df 
+
+df %>%
+  ggplot(aes(y = price, label = LeadROName, label1= Title, label2 = ProjectReference)) + 
+  geom_linerange(aes(xmin = StartDate, xmax = EndDate, y = price), color = "#363636") +
+  geom_point(aes(x = StartDate), color = "#363636") + 
+  geom_point(aes(x = EndDate), color = "blue") -> g
+
+ggplotly(g) %>%
+  style(traces = 2, text = paste(df$StartDate,"\n",df$duration, "days")) %>%
+  style(traces = 1, text = paste( df$PIFirstName, df$PISurname,"\n",df$duration, "days")) %>%
+  style(traces = 3, customdata = df$GTRProjectUrl, text = paste(df$EndDate,"\n", df$LeadROName, "\n",df$Title)) %>%
+  onRender("
+    function(el) { 
+      el.on('plotly_click', function(d) { 
+        var url = d.points[0].customdata;
+        window.open(url);
+      });
+    }
+  ") #set up click event that open URL
+```
+

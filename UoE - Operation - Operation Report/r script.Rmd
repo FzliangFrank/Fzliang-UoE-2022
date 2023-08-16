@@ -1,0 +1,234 @@
+---
+title: "For Operation Analysis"
+author: "Frank Liang"
+date: "22/04/2021"
+output: html_document
+editor_options: 
+  chunk_output_type: inline
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library("rDEA")
+library("dplyr")
+#install.packages("rDEA")
+library("ggplot2")
+library("plotly")
+library("readr")
+```
+
+```{r}
+DEA <- read_csv("./DEA.csv")
+
+DEA$`average pay` <- gsub("\\$", '', DEA$`average pay`)
+DEA$`average pay` <- gsub("\\s",'', DEA$`average pay`)
+DEA$`average pay` <- gsub(",",'', DEA$`average pay`)
+DEA$`average pay` <- as.numeric(DEA$`average pay`)
+
+```
+
+# Project 1: DEA analysis
+b. calculate efficiency score without tuition fee
+```{r}
+x <- DEA[,3:4]
+y <- DEA[,5:6]
+
+dea <- dea(XREF=x, YREF=y, X=x, Y=y, model="input", RTS="constant")
+DEA$efficiency_b <- dea$thetaOpt
+
+DEA
+DEA$efficiency_b
+```
+
+c.1 calculate efficiency score with tuition fee without derive dimension 
+```{r}
+X <- DEA[,2:4]
+Y <- DEA[,5:6]
+
+di_naive = dea(XREF=X, YREF=Y, X=X, Y=Y, model="input", RTS="constant")
+DEA$efficiency_c <- di_naive$thetaOpt
+
+DEA[,c(1,8)]
+```
+
+ 
+```{r}
+
+fon <- cbind(DEA[,2]/(DEA[,6]*DEA[,5]), DEA[,3]*DEA[,4]/(DEA[,6]*DEA[,5]))
+names(fon)[1] <- "input_1"
+names(fon)[2] <- "input_2"
+
+with(fon, plot(x = input_1, y = input_2, type = "p"))
+
+fon <- cbind(fon, DEA[,c(1,7,8)])
+
+```
+
+Use `ggplot`
+```{r}
+
+names(fon)[names(fon) == "X1"] <- "uni" 
+
+eff <- fon[fon$efficiency_c == 1, 1:3]
+
+fon[,c(3,5)]
+
+
+p <- ggplot(fon, aes(x= input_1, y= input_2, text = uni)) +
+       geom_point(shape=1) +
+    geom_point(data = eff, color = "blue")
+    
+ggplotly(p)
+```
+
+
+c.2.1 calculate efficiency score with tuition fee without derive dimension 
+```{r}
+# derive dimension
+x <- cbind(DEA[,2], DEA[,3]*DEA[,4])
+y <- DEA[,5]*DEA[,6]
+  
+trans <- dea(XREF <- x, YREF <- y, X = x, Y = y, model = "input", RTS="constant")
+
+# cbind data to fon
+fon <- cbind(fon, trans$thetaOpt)
+fon[,c(3,6)]
+```
+
+c.2.2 ploting via ggplot
+```{r echo=TRUE}
+# plot
+names(fon)[1] <- "x"
+names(fon)[2] <- "y"
+eff2 <- fon[fon$`trans$thetaOpt` == 1, 1:3]
+g <- ggplot(fon, aes(x = x, y = y, label = uni)) +
+  geom_point(shape = 1) +
+  geom_point(data = eff2, color = "blue") + 
+  labs(x = "tuition fee", y = "competitivness")
+
+ggplotly(g)
+```
+please find HTML output in folder
+
+# Project 3
+
+
+```{r}
+library(tidyverse)
+library(network)
+
+# create network object
+edge <- tibble(from = c(1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 5, 5, 6), 
+               to = c(2, 3, 4, 5, 4, 3, 4, 5, 6, 5, 6, 6, 7, 7),
+               cap = c(1, 5, 2, 4, 1, 2, 3, 6, 8, 3, 7, 5, 2, 6))
+node <- tibble(id = 1:7)
+
+nw <- network(edge, vertex.attr = node, matrix.type = "edgelist", ignore.eval = FALSE)
+plot(nw, vertex.cex = 4)
+
+nw
+```
+`plot` use `Fruchterman and Reingold algorithm` to decide on the placement of the nodes.
+
+
+```{r}
+detach(package:network)
+#rm(routes_network)
+library(igraph)
+install.packages("visNetwork")
+library(visNetwork)
+```
+computing max flow
+```{r}
+igph <- graph_from_data_frame(d = edge, vertices = node, directed = TRUE)
+max <- graph.maxflow(igph, source = 1, target = 7, capacity = edge$cap)
+max$flow
+
+
+shortest_paths(igph, from = 1, to = 7, )
+
+```
+Visualisation
+
+note: `edges` `nodes` are object created for the purpose of visualization. Raw data are preserved in object `edge` and `node`. 
+```{R}
+edges <- edge %>% 
+  mutate(flow = max$flow) %>%
+  mutate(dashes = flow == 0) %>%
+  mutate(shadow = flow != 0) %>%
+  mutate(width = flow/3 + 1) %>%
+  mutate(label = flow)
+  
+
+nodes <- node %>%
+  mutate(label = id) %>%
+  mutate(shape = c("circle"))
+
+nodes
+
+visNetwork(nodes, edges) %>%
+  visIgraphLayout(layout = "layout_with_fr")  %>%
+  visEdges(arrows = "to", color = list(color = "lightblue",
+                                       highlight = "powderblue",
+                                       hover = "powderblue")) %>%
+  visNodes(size = 20, color = list(background = "lightblue", 
+                                   highlight = "coral", 
+                                   border = "lightblue",
+                                   hover = "coral"),
+           font = list(color = "white",size = 14, strokeWidth = 1, align = "center")
+           ) %>%
+  visOptions( highlightNearest = list(enabled = TRUE, hover = TRUE))
+
+```
+
+longest path
+```{r}
+edge.b <- mutate(edge, new_cap = max(cap) - cap + 1)
+igph.b <- graph_from_data_frame(d = edge.b, vertices = node, directed = TRUE)
+
+e <- all_simple_paths(igph.b, from = 1, to = 7) 
+e <- list(1, 3, 5, 6, 7)
+```
+
+```{r}
+path <- e %>%
+  unlist() %>%
+  matrix(nrow = length(e), byrow = "FALSE") %>%
+  data.frame() %>%
+  mutate(color = "coral")
+nodes.c <- node %>%
+  mutate(label = id) %>%
+  mutate(shape = c("circle")) %>%
+  left_join(path, copy = TRUE, by = c("id" = "."))
+
+path2 <- edge[c(2, 8, 12, 14),] %>%
+  mutate(color = "coral") %>%
+  mutate(shadow = TRUE)
+edges.c <- edge %>%
+  mutate(label = cap) %>%
+  left_join(path2) 
+visNetwork(nodes.c, edges.c)  %>%
+  visIgraphLayout(layout = "layout_with_fr")  %>%
+  visEdges(arrows = "to", color = list(color = "lightblue",
+                                       highlight = "powderblue",
+                                       hover = "powderblue")) %>%
+  visNodes(size = 20, color = list(background = "lightblue", 
+                                   highlight = "coral", 
+                                   border = "lightblue",
+                                   hover = "coral"),
+           font = list(color = "white",size = 14, strokeWidth = 1, align = "center")
+           ) %>%
+  visOptions( highlightNearest = list(enabled = TRUE, hover = TRUE))
+```
+```{r}
+edge[, c(1,2)] == c(1,2)
+edge[c(2, 8, 12, 14),]
+```
+
+
+
+
+
